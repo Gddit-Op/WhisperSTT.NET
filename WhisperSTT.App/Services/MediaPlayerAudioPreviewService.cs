@@ -1,3 +1,4 @@
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using WhisperSTT.Core.Services;
 
@@ -5,7 +6,7 @@ namespace WhisperSTT.App.Services;
 
 public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
 {
-    private WaveOutEvent? _waveOut;
+    private IWavePlayer? _waveOut;
     private AudioFileReader? _audioFileReader;
     private string? _loadedFilePath;
 
@@ -14,10 +15,21 @@ public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
     public void Load(string filePath)
     {
         DisposePlayback();
-        _loadedFilePath = filePath;
-        _audioFileReader = new AudioFileReader(filePath);
-        _waveOut = new WaveOutEvent();
-        _waveOut.Init(_audioFileReader);
+
+        var reader = new AudioFileReader(filePath);
+        try
+        {
+            var player = CreatePlayer(reader);
+            _audioFileReader = reader;
+            _waveOut = player;
+            _loadedFilePath = filePath;
+        }
+        catch
+        {
+            reader.Dispose();
+            _loadedFilePath = null;
+            throw;
+        }
     }
 
     public void Play()
@@ -52,5 +64,33 @@ public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
 
         _audioFileReader?.Dispose();
         _audioFileReader = null;
+        _loadedFilePath = null;
+    }
+
+    private static IWavePlayer CreatePlayer(IWaveProvider waveProvider)
+    {
+        try
+        {
+            var waveOut = new WaveOutEvent();
+            waveOut.Init(waveProvider);
+            return waveOut;
+        }
+        catch (Exception)
+        {
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                var wasapiOut = new WasapiOut(device, AudioClientShareMode.Shared, false, 200);
+                wasapiOut.Init(waveProvider);
+                return wasapiOut;
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "Audio preview could not be initialized. File selection and transcription still work, but playback preview is unavailable on this system.",
+                    exception);
+            }
+        }
     }
 }

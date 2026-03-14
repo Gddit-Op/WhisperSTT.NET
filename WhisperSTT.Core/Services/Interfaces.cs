@@ -41,6 +41,11 @@ public interface IPasteService
         CancellationToken cancellationToken = default);
 }
 
+public interface IFilePickerService
+{
+    Task<string?> PickAudioFileAsync(CancellationToken cancellationToken = default);
+}
+
 public interface IModelManagementService
 {
     string ResolveModelPath(AppSettings settings, ModelPreset preset);

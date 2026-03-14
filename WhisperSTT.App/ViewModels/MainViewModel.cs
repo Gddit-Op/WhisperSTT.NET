@@ -4,7 +4,6 @@ using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using AvaloniaBrushes = Avalonia.Media.Brushes;
-using FileDialog = System.Windows.Forms.OpenFileDialog;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
 
@@ -19,6 +18,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ITranscriptionService _transcriptionService;
     private readonly IAudioRecorderService _audioRecorderService;
     private readonly IPasteService _pasteService;
+    private readonly IFilePickerService _filePickerService;
     private readonly IAudioPreviewService _audioPreviewService;
     private AppStatus _status = AppStatus.Idle;
     private string _statusText = "Idle";
@@ -38,6 +38,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ITranscriptionService transcriptionService,
         IAudioRecorderService audioRecorderService,
         IPasteService pasteService,
+        IFilePickerService filePickerService,
         IAudioPreviewService audioPreviewService)
     {
         Settings = settings;
@@ -48,6 +49,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _transcriptionService = transcriptionService;
         _audioRecorderService = audioRecorderService;
         _pasteService = pasteService;
+        _filePickerService = filePickerService;
         _audioPreviewService = audioPreviewService;
         _selectedFilePath = settings.Transcription.LastFilePath;
         _preferredInputDeviceNumberText = settings.Audio.PreferredInputDeviceNumber?.ToString() ?? string.Empty;
@@ -55,7 +57,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ToggleRecordingCommand = new AsyncRelayCommand(ToggleRecordingAsync, () => Status != AppStatus.Transcribing);
         CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync);
-        BrowseFileCommand = new RelayCommand(BrowseFile);
+        BrowseFileCommand = new AsyncRelayCommand(BrowseFileAsync);
         TranscribeFileCommand = new AsyncRelayCommand(TranscribeSelectedFileAsync, CanTranscribeFile);
         DownloadModelCommand = new AsyncRelayCommand(DownloadSelectedModelAsync, () => Status != AppStatus.Recording);
         CopyLatestTranscriptCommand = new AsyncRelayCommand(CopyLatestTranscriptAsync, CanCopyLatestTranscript);
@@ -80,7 +82,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public AsyncRelayCommand SaveSettingsCommand { get; }
 
-    public RelayCommand BrowseFileCommand { get; }
+    public AsyncRelayCommand BrowseFileCommand { get; }
 
     public AsyncRelayCommand TranscribeFileCommand { get; }
 
@@ -340,20 +342,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return result;
     }
 
-    private void BrowseFile()
+    private async Task BrowseFileAsync()
     {
-        var dialog = new FileDialog
+        var filePath = await _filePickerService.PickAudioFileAsync().ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(filePath))
         {
-            Filter = "Audio Files|*.wav;*.mp3",
-            Title = "Select audio file"
-        };
-
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-        {
-            SelectedFilePath = dialog.FileName;
-            _audioPreviewService.Load(dialog.FileName);
-            RaiseCommandStates();
+            return;
         }
+
+        SelectedFilePath = filePath;
+        TryLoadPreview(filePath);
+        RaiseCommandStates();
     }
 
     private async Task TranscribeSelectedFileAsync()
@@ -403,7 +402,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (!_audioPreviewService.IsLoaded && File.Exists(SelectedFilePath))
         {
-            _audioPreviewService.Load(SelectedFilePath);
+            if (!TryLoadPreview(SelectedFilePath))
+            {
+                return;
+            }
         }
 
         _audioPreviewService.Play();
@@ -434,6 +436,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool CanCopyLatestTranscript()
     {
         return !string.IsNullOrWhiteSpace(CurrentTranscript);
+    }
+
+    private bool TryLoadPreview(string filePath)
+    {
+        try
+        {
+            _audioPreviewService.Load(filePath);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            LastError = exception.Message;
+            _ = LogAsync($"Preview unavailable: {exception.Message}");
+            RaiseCommandStates();
+            return false;
+        }
     }
 
     private void ApplyPreferredInputDeviceSetting()

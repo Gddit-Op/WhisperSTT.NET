@@ -2,12 +2,12 @@ using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using WhisperSTT.App.Services;
 using WhisperSTT.App.ViewModels;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
-using Forms = System.Windows.Forms;
 
 namespace WhisperSTT.App;
 
@@ -15,8 +15,9 @@ public partial class App : Avalonia.Application
 {
     private MainWindow? _window;
     private MainViewModel? _viewModel;
-    private Forms.NotifyIcon? _trayIcon;
-    private Forms.ToolStripMenuItem? _toggleRecordingMenuItem;
+    private TrayIcon? _trayIcon;
+    private TrayIcons? _trayIcons;
+    private NativeMenuItem? _toggleRecordingMenuItem;
     private StatusIconSet? _statusIcons;
     private bool _isExiting;
     private IClassicDesktopStyleApplicationLifetime? _desktopLifetime;
@@ -49,6 +50,7 @@ public partial class App : Avalonia.Application
             var transcriptionService = new WhisperTranscriptionService();
             var recorderService = new NAudioRecorderService(paths);
             var pasteService = new ClipboardPasteService();
+            var filePickerService = new AvaloniaFilePickerService();
             var audioPreviewService = new MediaPlayerAudioPreviewService();
 
             _viewModel = new MainViewModel(
@@ -60,6 +62,7 @@ public partial class App : Avalonia.Application
                 transcriptionService,
                 recorderService,
                 pasteService,
+                filePickerService,
                 audioPreviewService);
 
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -74,13 +77,7 @@ public partial class App : Avalonia.Application
         }
         catch (Exception exception)
         {
-            Forms.MessageBox.Show(
-                exception.Message,
-                "WhisperSTT startup failed",
-                Forms.MessageBoxButtons.OK,
-                Forms.MessageBoxIcon.Error);
-
-            desktopLifetime.Shutdown(-1);
+            ShowStartupErrorWindow(desktopLifetime, exception.Message);
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -88,6 +85,11 @@ public partial class App : Avalonia.Application
 
     private void OnDesktopLifetimeExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
     {
+        if (_trayIcons is not null)
+        {
+            TrayIcon.SetIcons(this, null);
+        }
+
         _trayIcon?.Dispose();
         _statusIcons?.Dispose();
         _viewModel?.Dispose();
@@ -100,33 +102,39 @@ public partial class App : Avalonia.Application
             return;
         }
 
-        var contextMenu = new Forms.ContextMenuStrip();
-        _toggleRecordingMenuItem = new Forms.ToolStripMenuItem("Start Recording");
-        _toggleRecordingMenuItem.Click += async (_, _) => await _viewModel.ToggleRecordingAsync();
-
-        var cancelMenuItem = new Forms.ToolStripMenuItem("Cancel Recording");
-        cancelMenuItem.Click += async (_, _) => await _viewModel.CancelRecordingAsync();
-
-        var openMenuItem = new Forms.ToolStripMenuItem("Open Settings");
-        openMenuItem.Click += (_, _) => _window?.ShowFromTray();
-
-        var exitMenuItem = new Forms.ToolStripMenuItem("Exit");
-        exitMenuItem.Click += (_, _) => ExitApplication();
-
-        contextMenu.Items.Add(openMenuItem);
-        contextMenu.Items.Add(_toggleRecordingMenuItem);
-        contextMenu.Items.Add(cancelMenuItem);
-        contextMenu.Items.Add(new Forms.ToolStripSeparator());
-        contextMenu.Items.Add(exitMenuItem);
-
-        _trayIcon = new Forms.NotifyIcon
+        var contextMenu = new NativeMenu();
+        _toggleRecordingMenuItem = new NativeMenuItem("Start Recording")
         {
-            Visible = true,
-            ContextMenuStrip = contextMenu,
-            Text = "WhisperSTT"
+            Command = _viewModel.ToggleRecordingCommand
         };
 
-        _trayIcon.DoubleClick += (_, _) => _window?.ShowFromTray();
+        var cancelMenuItem = new NativeMenuItem("Cancel Recording")
+        {
+            Command = _viewModel.CancelRecordingCommand
+        };
+
+        var openMenuItem = new NativeMenuItem("Open Settings");
+        openMenuItem.Click += (_, _) => _window?.ShowFromTray();
+
+        var exitMenuItem = new NativeMenuItem("Exit");
+        exitMenuItem.Click += (_, _) => ExitApplication();
+
+        contextMenu.Add(openMenuItem);
+        contextMenu.Add(_toggleRecordingMenuItem);
+        contextMenu.Add(cancelMenuItem);
+        contextMenu.Add(new NativeMenuItemSeparator());
+        contextMenu.Add(exitMenuItem);
+
+        _trayIcon = new TrayIcon
+        {
+            IsVisible = true,
+            Menu = contextMenu,
+            ToolTipText = "WhisperSTT"
+        };
+
+        _trayIcon.Clicked += (_, _) => _window?.ShowFromTray();
+        _trayIcons = [_trayIcon];
+        TrayIcon.SetIcons(this, _trayIcons);
         UpdateTrayPresentation();
     }
 
@@ -147,7 +155,7 @@ public partial class App : Avalonia.Application
 
         if (_toggleRecordingMenuItem is not null)
         {
-            _toggleRecordingMenuItem.Text = _viewModel.Status == AppStatus.Recording
+            _toggleRecordingMenuItem.Header = _viewModel.Status == AppStatus.Recording
                 ? "Stop Recording"
                 : "Start Recording";
         }
@@ -155,7 +163,7 @@ public partial class App : Avalonia.Application
         if (_trayIcon is not null)
         {
             var tooltip = $"WhisperSTT - {_viewModel.StatusText}";
-            _trayIcon.Text = tooltip.Length > 63 ? tooltip[..63] : tooltip;
+            _trayIcon.ToolTipText = tooltip.Length > 63 ? tooltip[..63] : tooltip;
         }
 
         UpdateStatusIcons(_viewModel.Status);
@@ -200,5 +208,50 @@ public partial class App : Avalonia.Application
         }
 
         previousIcons?.Dispose();
+    }
+
+    private static void ShowStartupErrorWindow(
+        IClassicDesktopStyleApplicationLifetime desktopLifetime,
+        string message)
+    {
+        var closeButton = new Button
+        {
+            Content = "Close",
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+
+        var errorWindow = new Window
+        {
+            Title = "WhisperSTT startup failed",
+            Width = 540,
+            Height = 240,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 14,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "The application could not be started.",
+                        FontSize = 20,
+                        FontWeight = Avalonia.Media.FontWeight.SemiBold
+                    },
+                    new TextBlock
+                    {
+                        Text = message,
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                    },
+                    closeButton
+                }
+            }
+        };
+
+        closeButton.Click += (_, _) => desktopLifetime.Shutdown(-1);
+        errorWindow.Closed += (_, _) => desktopLifetime.Shutdown(-1);
+        desktopLifetime.MainWindow = errorWindow;
+        errorWindow.Show();
     }
 }

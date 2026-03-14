@@ -1,20 +1,10 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using WhisperSTT.Core.Models;
 
 namespace WhisperSTT.Core.Services;
 
 public sealed class JsonSettingsStore : ISettingsStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = true,
-        Converters =
-        {
-            new JsonStringEnumConverter()
-        }
-    };
-
     private readonly ApplicationPaths _paths;
 
     public JsonSettingsStore(ApplicationPaths paths)
@@ -37,7 +27,7 @@ public sealed class JsonSettingsStore : ISettingsStore
         await using var stream = File.OpenRead(ConfigPath);
         var settings = await JsonSerializer.DeserializeAsync<AppSettings>(
             stream,
-            SerializerOptions,
+            AppSettingsJsonContext.Default.AppSettings,
             cancellationToken).ConfigureAwait(false);
 
         if (settings is null)
@@ -54,7 +44,7 @@ public sealed class JsonSettingsStore : ISettingsStore
     {
         _paths.EnsureCreated();
         await using var stream = File.Create(ConfigPath);
-        await JsonSerializer.SerializeAsync(stream, settings, SerializerOptions, cancellationToken)
+        await JsonSerializer.SerializeAsync(stream, settings, AppSettingsJsonContext.Default.AppSettings, cancellationToken)
             .ConfigureAwait(false);
     }
 }

@@ -1,7 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using WhisperSTT.Core.Models;
 
@@ -9,13 +8,13 @@ namespace WhisperSTT.App.Services;
 
 public sealed class StatusIconSet : IDisposable
 {
-    public required Icon TrayIcon { get; init; }
+    public required WindowIcon TrayIcon { get; init; }
 
     public required WindowIcon WindowIcon { get; init; }
 
     public void Dispose()
     {
-        TrayIcon.Dispose();
+        // WindowIcon does not expose disposal; the icon streams are copied on construction.
     }
 }
 
@@ -41,23 +40,13 @@ public static class StatusIconFactory
 
         using var pngStream = new MemoryStream();
         bitmap.Save(pngStream, ImageFormat.Png);
-        pngStream.Position = 0;
-        var windowIcon = new WindowIcon(pngStream);
+        var iconBytes = pngStream.ToArray();
 
-        var handle = bitmap.GetHicon();
-        try
+        return new StatusIconSet
         {
-            var trayIcon = (Icon)Icon.FromHandle(handle).Clone();
-            return new StatusIconSet
-            {
-                TrayIcon = trayIcon,
-                WindowIcon = windowIcon
-            };
-        }
-        finally
-        {
-            DestroyIcon(handle);
-        }
+            TrayIcon = new WindowIcon(new MemoryStream(iconBytes, writable: false)),
+            WindowIcon = new WindowIcon(new MemoryStream(iconBytes, writable: false))
+        };
     }
 
     private static Color GetStatusColor(AppStatus status) => status switch
@@ -135,8 +124,4 @@ public static class StatusIconFactory
 
         graphics.FillPath(brush, path);
     }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyIcon(IntPtr hIcon);
 }

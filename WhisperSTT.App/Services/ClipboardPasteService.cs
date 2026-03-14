@@ -1,12 +1,14 @@
 using System.Runtime.InteropServices;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
 using WhisperSTT.Core.Services;
-using Forms = System.Windows.Forms;
 
 namespace WhisperSTT.App.Services;
 
 public sealed class ClipboardPasteService : IPasteService
 {
-    private const int ClipboardBusyHResult = unchecked((int)0x800401D0);
     private const int ClipboardRetryCount = 8;
     private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(75);
 
@@ -18,7 +20,7 @@ public sealed class ClipboardPasteService : IPasteService
         }
 
         await RunClipboardActionAsync(
-            () => Forms.Clipboard.SetText(text),
+            clipboard => clipboard.SetTextAsync(text),
             cancellationToken,
             throwOnFailure: true).ConfigureAwait(true);
     }
@@ -30,44 +32,49 @@ public sealed class ClipboardPasteService : IPasteService
             return;
         }
 
-        var snapshot = restoreClipboard
-            ? await TryGetClipboardSnapshotAsync(cancellationToken).ConfigureAwait(true)
-            : null;
-
-        await RunClipboardActionAsync(
-            () => Forms.Clipboard.SetText(text),
-            cancellationToken,
-            throwOnFailure: true).ConfigureAwait(true);
-
-        Forms.SendKeys.SendWait("^v");
-        await Task.Delay(100, cancellationToken).ConfigureAwait(true);
-
-        if (!restoreClipboard)
+        IAsyncDataTransfer? snapshot = null;
+        if (restoreClipboard)
         {
-            return;
+            snapshot = await TryGetClipboardSnapshotAsync(cancellationToken).ConfigureAwait(true);
         }
 
-        if (snapshot is null)
+        try
         {
             await RunClipboardActionAsync(
-                Forms.Clipboard.Clear,
+                clipboard => clipboard.SetTextAsync(text),
+                cancellationToken,
+                throwOnFailure: true).ConfigureAwait(true);
+
+            SendPasteShortcut();
+            await Task.Delay(100, cancellationToken).ConfigureAwait(true);
+
+            if (!restoreClipboard)
+            {
+                return;
+            }
+
+            await RunClipboardActionAsync(
+                snapshot is null
+                    ? clipboard => clipboard.ClearAsync()
+                    : clipboard => clipboard.SetDataAsync(snapshot),
                 cancellationToken,
                 throwOnFailure: false).ConfigureAwait(true);
-            return;
         }
-
-        await RunClipboardActionAsync(
-            () => Forms.Clipboard.SetDataObject(snapshot, false),
-            cancellationToken,
-            throwOnFailure: false).ConfigureAwait(true);
+        finally
+        {
+            if (snapshot is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
     }
 
-    private static async Task<Forms.IDataObject?> TryGetClipboardSnapshotAsync(CancellationToken cancellationToken)
+    private static async Task<IAsyncDataTransfer?> TryGetClipboardSnapshotAsync(CancellationToken cancellationToken)
     {
         try
         {
             return await RunClipboardFunctionAsync(
-                Forms.Clipboard.GetDataObject,
+                clipboard => clipboard.TryGetDataAsync(),
                 cancellationToken,
                 throwOnFailure: false).ConfigureAwait(true);
         }
@@ -78,14 +85,14 @@ public sealed class ClipboardPasteService : IPasteService
     }
 
     private static async Task RunClipboardActionAsync(
-        Action action,
+        Func<IClipboard, Task> action,
         CancellationToken cancellationToken,
         bool throwOnFailure)
     {
         _ = await RunClipboardFunctionAsync(
-            () =>
+            async clipboard =>
             {
-                action();
+                await action(clipboard).ConfigureAwait(true);
                 return true;
             },
             cancellationToken,
@@ -93,7 +100,7 @@ public sealed class ClipboardPasteService : IPasteService
     }
 
     private static async Task<T?> RunClipboardFunctionAsync<T>(
-        Func<T> action,
+        Func<IClipboard, Task<T>> action,
         CancellationToken cancellationToken,
         bool throwOnFailure)
     {
@@ -103,9 +110,10 @@ public sealed class ClipboardPasteService : IPasteService
 
             try
             {
-                return action();
+                var clipboard = GetClipboard();
+                return await action(clipboard).ConfigureAwait(true);
             }
-            catch (COMException exception) when (exception.HResult == ClipboardBusyHResult)
+            catch (Exception exception) when (IsTransientClipboardException(exception))
             {
                 if (attempt == ClipboardRetryCount)
                 {
@@ -124,5 +132,54 @@ public sealed class ClipboardPasteService : IPasteService
         }
 
         return default;
+    }
+
+    private static IClipboard GetClipboard()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } window } &&
+            window.Clipboard is { } clipboard)
+        {
+            return clipboard;
+        }
+
+        throw new InvalidOperationException("Clipboard is not available because the main window is not initialized.");
+    }
+
+    private static bool IsTransientClipboardException(Exception exception)
+    {
+        return exception is COMException or ExternalException or InvalidOperationException;
+    }
+
+    private static void SendPasteShortcut()
+    {
+        var inputs = new[]
+        {
+            CreateKeyInput(NativeMethods.VkControl, keyUp: false),
+            CreateKeyInput(NativeMethods.VkV, keyUp: false),
+            CreateKeyInput(NativeMethods.VkV, keyUp: true),
+            CreateKeyInput(NativeMethods.VkControl, keyUp: true)
+        };
+
+        var sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent != inputs.Length)
+        {
+            throw new InvalidOperationException("Sending Ctrl+V with SendInput failed.");
+        }
+    }
+
+    private static NativeMethods.INPUT CreateKeyInput(ushort virtualKey, bool keyUp)
+    {
+        return new NativeMethods.INPUT
+        {
+            type = NativeMethods.InputKeyboard,
+            U = new NativeMethods.InputUnion
+            {
+                ki = new NativeMethods.KEYBDINPUT
+                {
+                    wVk = virtualKey,
+                    dwFlags = keyUp ? NativeMethods.KeyEventFKeyUp : 0
+                }
+            }
+        };
     }
 }

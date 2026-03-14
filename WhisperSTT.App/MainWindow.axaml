@@ -1,6 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:WhisperSTT.App.ViewModels"
         x:Class="WhisperSTT.App.MainWindow"
+        x:DataType="vm:MainViewModel"
         Title="WhisperSTT"
         Width="1100"
         Height="760"

@@ -126,6 +126,16 @@ Run the app:
 dotnet run --project .\WhisperSTT.App\WhisperSTT.App.csproj
 ```
 
+Publish a Windows desktop build:
+
+```powershell
+dotnet publish .\WhisperSTT.App\WhisperSTT.App.csproj -c Release -r win-x64 --self-contained true
+```
+
+Publish note:
+
+- NativeAOT and trimming are intentionally disabled for the desktop app because `NAudio` playback/recording and `Whisper.net` native runtime loading are not reliable under the current AOT/single-file setup.
+
 ## First Start
 
 1. Start the app.

@@ -18,11 +18,11 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />
-    <PackageReference Include="Whisper.net" Version="1.9.0" />
-    <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
-    <PackageReference Include="Whisper.net.Runtime.Cuda" Version="1.9.0" />
-    <PackageReference Include="Whisper.net.Runtime.OpenVino" Version="1.9.0" />
-    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.0" />
+    <PackageReference Include="Whisper.net" Version="1.9.1-preview1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1-preview1" />
+    <PackageReference Include="Whisper.net.Runtime.Cuda" Version="1.9.1-preview1" />
+    <PackageReference Include="Whisper.net.Runtime.OpenVino" Version="1.9.1-preview1" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1-preview1" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -32,7 +32,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <PublishAot>true</PublishAot>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
   </PropertyGroup>

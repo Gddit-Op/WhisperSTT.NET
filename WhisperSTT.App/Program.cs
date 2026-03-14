@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Logging;
 
 namespace WhisperSTT.App;
 
@@ -14,6 +15,6 @@ internal static class Program
     {
         return AppBuilder.Configure<App>()
             .UsePlatformDetect()
-            .LogToTrace();
+            .LogToTrace(LogEventLevel.Error);
     }
 }

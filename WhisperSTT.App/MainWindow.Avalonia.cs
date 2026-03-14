@@ -12,11 +12,23 @@ public partial class MainWindow : Window
     private readonly MainViewModel _viewModel;
     private GlobalHotkeyService? _globalHotkeyService;
 
+    public MainWindow()
+    {
+        _viewModel = DesignTimeViewModelFactory.Create();
+        InitializeWindow();
+        DataContext = _viewModel;
+    }
+
     public MainWindow(MainViewModel viewModel)
     {
         _viewModel = viewModel;
-        InitializeComponent();
+        InitializeWindow();
         DataContext = _viewModel;
+    }
+
+    private void InitializeWindow()
+    {
+        InitializeComponent();
         Opened += OnOpened;
         _viewModel.HotkeysChanged += OnHotkeysChanged;
     }

@@ -58,6 +58,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         BrowseFileCommand = new RelayCommand(BrowseFile);
         TranscribeFileCommand = new AsyncRelayCommand(TranscribeSelectedFileAsync, CanTranscribeFile);
         DownloadModelCommand = new AsyncRelayCommand(DownloadSelectedModelAsync, () => Status != AppStatus.Recording);
+        CopyLatestTranscriptCommand = new AsyncRelayCommand(CopyLatestTranscriptAsync, CanCopyLatestTranscript);
         PlayPreviewCommand = new RelayCommand(PlayPreview, CanPreviewFile);
         PausePreviewCommand = new RelayCommand(PausePreview, () => _audioPreviewService.IsLoaded);
         StopPreviewCommand = new RelayCommand(StopPreview, () => _audioPreviewService.IsLoaded);
@@ -82,6 +83,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand TranscribeFileCommand { get; }
 
     public AsyncRelayCommand DownloadModelCommand { get; }
+
+    public AsyncRelayCommand CopyLatestTranscriptCommand { get; }
 
     public RelayCommand PlayPreviewCommand { get; }
 
@@ -123,7 +126,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string CurrentTranscript
     {
         get => _currentTranscript;
-        private set => SetProperty(ref _currentTranscript, value);
+        private set
+        {
+            if (SetProperty(ref _currentTranscript, value))
+            {
+                RaiseCommandStates();
+            }
+        }
     }
 
     public string FileTranscript
@@ -249,6 +258,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _audioPreviewService.Dispose();
+    }
+
+    private async Task CopyLatestTranscriptAsync()
+    {
+        try
+        {
+            await _pasteService.CopyTextToClipboardAsync(CurrentTranscript).ConfigureAwait(true);
+            LastError = "Latest transcript copied to clipboard.";
+            await LogAsync("Latest transcript copied to clipboard.").ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            await HandleExceptionAsync(exception).ConfigureAwait(true);
+        }
     }
 
     private async Task StopRecordingAndTranscribeAsync()
@@ -400,6 +423,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return !string.IsNullOrWhiteSpace(SelectedFilePath) && File.Exists(SelectedFilePath);
     }
 
+    private bool CanCopyLatestTranscript()
+    {
+        return !string.IsNullOrWhiteSpace(CurrentTranscript);
+    }
+
     private void ApplyPreferredInputDeviceSetting()
     {
         if (int.TryParse(PreferredInputDeviceNumberText, out var value) && value >= 0)
@@ -449,6 +477,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SaveSettingsCommand.NotifyCanExecuteChanged();
         TranscribeFileCommand.NotifyCanExecuteChanged();
         DownloadModelCommand.NotifyCanExecuteChanged();
+        CopyLatestTranscriptCommand.NotifyCanExecuteChanged();
         PlayPreviewCommand.NotifyCanExecuteChanged();
         PausePreviewCommand.NotifyCanExecuteChanged();
         StopPreviewCommand.NotifyCanExecuteChanged();

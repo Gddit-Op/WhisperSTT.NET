@@ -10,6 +10,19 @@ public sealed class ClipboardPasteService : IPasteService
     private const int ClipboardRetryCount = 8;
     private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(75);
 
+    public async Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        await RunClipboardActionAsync(
+            () => Forms.Clipboard.SetText(text),
+            cancellationToken,
+            throwOnFailure: true).ConfigureAwait(true);
+    }
+
     public async Task PasteTextAsync(string text, bool restoreClipboard, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))

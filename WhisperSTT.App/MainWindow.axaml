@@ -107,9 +107,16 @@
                   Background="{StaticResource PanelBrush}"
                   CornerRadius="14">
             <Grid RowDefinitions="Auto,*">
-              <TextBlock FontSize="18"
-                         FontWeight="SemiBold"
-                         Text="Latest Transcript" />
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock FontSize="18"
+                           FontWeight="SemiBold"
+                           Text="Latest Transcript" />
+                <Button Grid.Column="1"
+                        MinWidth="86"
+                        Padding="10,6"
+                        Command="{Binding CopyLatestTranscriptCommand}"
+                        Content="Copy" />
+              </Grid>
               <TextBox Grid.Row="1"
                        Margin="0,12,0,0"
                        AcceptsReturn="True"

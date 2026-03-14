@@ -31,6 +31,10 @@ public interface IAudioRecorderService
 
 public interface IPasteService
 {
+    Task CopyTextToClipboardAsync(
+        string text,
+        CancellationToken cancellationToken = default);
+
     Task PasteTextAsync(
         string text,
         bool restoreClipboard,

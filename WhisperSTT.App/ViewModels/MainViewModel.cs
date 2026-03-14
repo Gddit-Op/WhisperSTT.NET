@@ -1,10 +1,10 @@
 using System.Media;
 using System.IO;
-using System.Windows.Media;
-using Microsoft.Win32;
-using MediaBrush = System.Windows.Media.Brush;
-using WpfBrushes = System.Windows.Media.Brushes;
-using FileDialog = Microsoft.Win32.OpenFileDialog;
+using Avalonia.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using AvaloniaBrushes = Avalonia.Media.Brushes;
+using FileDialog = System.Windows.Forms.OpenFileDialog;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
 
@@ -108,13 +108,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _statusText, value);
     }
 
-    public MediaBrush StatusBrush => Status switch
+    public IBrush StatusBrush => Status switch
     {
-        AppStatus.Idle => WpfBrushes.SeaGreen,
-        AppStatus.Recording => WpfBrushes.Firebrick,
-        AppStatus.Transcribing => WpfBrushes.DarkGoldenrod,
-        AppStatus.Error => WpfBrushes.IndianRed,
-        _ => WpfBrushes.Gray
+        AppStatus.Idle => AvaloniaBrushes.SeaGreen,
+        AppStatus.Recording => AvaloniaBrushes.Firebrick,
+        AppStatus.Transcribing => AvaloniaBrushes.DarkGoldenrod,
+        AppStatus.Error => AvaloniaBrushes.IndianRed,
+        _ => AvaloniaBrushes.Gray
     };
 
     public string RecordingButtonText => Status == AppStatus.Recording ? "Stop Recording" : "Start Recording";
@@ -297,7 +297,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Title = "Select audio file"
         };
 
-        if (dialog.ShowDialog() == true)
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
         {
             SelectedFilePath = dialog.FileName;
             _audioPreviewService.Load(dialog.FileName);
@@ -415,14 +415,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RaiseCommandStates()
     {
-        ToggleRecordingCommand.RaiseCanExecuteChanged();
-        CancelRecordingCommand.RaiseCanExecuteChanged();
-        SaveSettingsCommand.RaiseCanExecuteChanged();
-        TranscribeFileCommand.RaiseCanExecuteChanged();
-        DownloadModelCommand.RaiseCanExecuteChanged();
-        PlayPreviewCommand.RaiseCanExecuteChanged();
-        PausePreviewCommand.RaiseCanExecuteChanged();
-        StopPreviewCommand.RaiseCanExecuteChanged();
+        ToggleRecordingCommand.NotifyCanExecuteChanged();
+        CancelRecordingCommand.NotifyCanExecuteChanged();
+        SaveSettingsCommand.NotifyCanExecuteChanged();
+        TranscribeFileCommand.NotifyCanExecuteChanged();
+        DownloadModelCommand.NotifyCanExecuteChanged();
+        PlayPreviewCommand.NotifyCanExecuteChanged();
+        PausePreviewCommand.NotifyCanExecuteChanged();
+        StopPreviewCommand.NotifyCanExecuteChanged();
     }
 
     private void PlayFeedbackSound(SystemSound sound)

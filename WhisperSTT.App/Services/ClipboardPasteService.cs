@@ -1,8 +1,6 @@
 using System.Runtime.InteropServices;
 using WhisperSTT.Core.Services;
 using Forms = System.Windows.Forms;
-using WpfClipboard = System.Windows.Clipboard;
-using WpfDataObject = System.Windows.IDataObject;
 
 namespace WhisperSTT.App.Services;
 
@@ -24,7 +22,7 @@ public sealed class ClipboardPasteService : IPasteService
             : null;
 
         await RunClipboardActionAsync(
-            () => WpfClipboard.SetText(text),
+            () => Forms.Clipboard.SetText(text),
             cancellationToken,
             throwOnFailure: true).ConfigureAwait(true);
 
@@ -39,24 +37,24 @@ public sealed class ClipboardPasteService : IPasteService
         if (snapshot is null)
         {
             await RunClipboardActionAsync(
-                WpfClipboard.Clear,
+                Forms.Clipboard.Clear,
                 cancellationToken,
                 throwOnFailure: false).ConfigureAwait(true);
             return;
         }
 
         await RunClipboardActionAsync(
-            () => WpfClipboard.SetDataObject(snapshot, false),
+            () => Forms.Clipboard.SetDataObject(snapshot, false),
             cancellationToken,
             throwOnFailure: false).ConfigureAwait(true);
     }
 
-    private static async Task<WpfDataObject?> TryGetClipboardSnapshotAsync(CancellationToken cancellationToken)
+    private static async Task<Forms.IDataObject?> TryGetClipboardSnapshotAsync(CancellationToken cancellationToken)
     {
         try
         {
             return await RunClipboardFunctionAsync(
-                WpfClipboard.GetDataObject,
+                Forms.Clipboard.GetDataObject,
                 cancellationToken,
                 throwOnFailure: false).ConfigureAwait(true);
         }

@@ -5,6 +5,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="App.xaml.cs" />
+    <Compile Remove="MainWindow.xaml.cs" />
+    <Compile Remove="ViewModels\ObservableObject.cs" />
+    <Compile Remove="ViewModels\RelayCommand.cs" />
+    <Compile Remove="ViewModels\AsyncRelayCommand.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="Whisper.net" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
@@ -18,7 +30,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 

@@ -1,0 +1,17 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fluent="clr-namespace:Avalonia.Themes.Fluent;assembly=Avalonia.Themes.Fluent"
+             x:Class="WhisperSTT.App.App"
+             RequestedThemeVariant="Default">
+  <Application.Styles>
+    <fluent:FluentTheme />
+  </Application.Styles>
+
+  <Application.Resources>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFF6F1E8" />
+    <SolidColorBrush x:Key="PanelBrush" Color="#FFFBF8F4" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#FF9E4B2D" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#FFE9D2C7" />
+    <SolidColorBrush x:Key="TextBrush" Color="#FF231B19" />
+  </Application.Resources>
+</Application>

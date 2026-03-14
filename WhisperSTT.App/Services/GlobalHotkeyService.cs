@@ -1,25 +1,29 @@
-using System.Windows;
-using System.Windows.Interop;
+using System.Runtime.InteropServices;
 using WhisperSTT.Core.Models;
 
 namespace WhisperSTT.App.Services;
 
 public sealed class GlobalHotkeyService : IDisposable
 {
-    private readonly Window _window;
+    private readonly IntPtr _windowHandle;
     private readonly Dictionary<int, string> _actionsById = new();
-    private HwndSource? _source;
+    private readonly WindowProc _windowProc;
+    private IntPtr _previousWindowProc;
 
-    public GlobalHotkeyService(Window window)
+    public GlobalHotkeyService(IntPtr windowHandle)
     {
-        _window = window;
+        _windowHandle = windowHandle;
+        _windowProc = WndProc;
+        _previousWindowProc = NativeMethods.SetWindowLongPtr(
+            _windowHandle,
+            NativeMethods.GwlpWndProc,
+            Marshal.GetFunctionPointerForDelegate(_windowProc));
     }
 
     public event EventHandler<HotkeyEventArgs>? HotkeyPressed;
 
     public void ApplySettings(HotkeySettings settings)
     {
-        EnsureSource();
         UnregisterAll();
         Register(1, settings.ToggleRecordingGesture, HotkeyActions.ToggleRecording);
         Register(2, settings.CancelRecordingGesture, HotkeyActions.CancelRecording);
@@ -28,29 +32,21 @@ public sealed class GlobalHotkeyService : IDisposable
     public void Dispose()
     {
         UnregisterAll();
-        _source?.RemoveHook(WndProc);
-    }
-
-    private void EnsureSource()
-    {
-        if (_source is not null)
+        if (_previousWindowProc != IntPtr.Zero)
         {
-            return;
+            NativeMethods.SetWindowLongPtr(_windowHandle, NativeMethods.GwlpWndProc, _previousWindowProc);
+            _previousWindowProc = IntPtr.Zero;
         }
-
-        var handle = new WindowInteropHelper(_window).Handle;
-        _source = HwndSource.FromHwnd(handle);
-        _source?.AddHook(WndProc);
     }
 
     private void Register(int id, string gesture, string actionName)
     {
-        if (_source is null || !TryParseGesture(gesture, out var modifiers, out var key))
+        if (!TryParseGesture(gesture, out var modifiers, out var key))
         {
             return;
         }
 
-        if (NativeMethods.RegisterHotKey(_source.Handle, id, modifiers, key))
+        if (NativeMethods.RegisterHotKey(_windowHandle, id, modifiers, key))
         {
             _actionsById[id] = actionName;
         }
@@ -58,20 +54,15 @@ public sealed class GlobalHotkeyService : IDisposable
 
     private void UnregisterAll()
     {
-        if (_source is null)
-        {
-            return;
-        }
-
         foreach (var id in _actionsById.Keys)
         {
-            NativeMethods.UnregisterHotKey(_source.Handle, id);
+            NativeMethods.UnregisterHotKey(_windowHandle, id);
         }
 
         _actionsById.Clear();
     }
 
-    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    private IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
         if (msg == NativeMethods.WmHotKey)
         {
@@ -79,11 +70,11 @@ public sealed class GlobalHotkeyService : IDisposable
             if (_actionsById.TryGetValue(id, out var actionName))
             {
                 HotkeyPressed?.Invoke(this, new HotkeyEventArgs(actionName));
-                handled = true;
+                return IntPtr.Zero;
             }
         }
 
-        return IntPtr.Zero;
+        return NativeMethods.CallWindowProc(_previousWindowProc, hwnd, msg, wParam, lParam);
     }
 
     private static bool TryParseGesture(string gesture, out uint modifiers, out uint key)
@@ -161,4 +152,6 @@ public sealed class GlobalHotkeyService : IDisposable
 
         return false;
     }
+
+    private delegate IntPtr WindowProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 }

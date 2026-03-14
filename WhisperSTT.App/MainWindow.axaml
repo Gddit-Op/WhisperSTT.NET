@@ -1,0 +1,334 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WhisperSTT.App.MainWindow"
+        Title="WhisperSTT"
+        Width="1100"
+        Height="760"
+        MinWidth="900"
+        MinHeight="620"
+        Background="{StaticResource SurfaceBrush}"
+        FontFamily="Bahnschrift"
+        WindowStartupLocation="CenterScreen">
+  <Grid Margin="18" RowDefinitions="Auto,*">
+    <Border Padding="18"
+            CornerRadius="18"
+            Background="{StaticResource PanelBrush}">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel>
+          <TextBlock FontSize="28"
+                     FontWeight="SemiBold"
+                     Foreground="{StaticResource TextBrush}"
+                     Text="WhisperSTT" />
+          <TextBlock Margin="0,8,0,0"
+                     FontSize="14"
+                     Foreground="{StaticResource TextBrush}"
+                     Opacity="0.75"
+                     Text="Offline desktop speech-to-text for system-wide dictation and local file transcription." />
+          <Border Margin="0,14,0,0"
+                  Padding="10,6"
+                  HorizontalAlignment="Left"
+                  Background="{Binding StatusBrush}"
+                  CornerRadius="999">
+            <TextBlock Foreground="White"
+                       FontWeight="SemiBold"
+                       Text="{Binding StatusText}" />
+          </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Top">
+          <Button Width="150"
+                  Margin="0,0,10,0"
+                  Padding="14,10"
+                  Background="{StaticResource AccentBrush}"
+                  Command="{Binding ToggleRecordingCommand}"
+                  Content="{Binding RecordingButtonText}"
+                  Foreground="White" />
+          <Button Width="130"
+                  Padding="14,10"
+                  Command="{Binding CancelRecordingCommand}"
+                  Content="Cancel"
+                  Foreground="{StaticResource TextBrush}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <TabControl Grid.Row="1"
+                Margin="0,16,0,0">
+      <TabItem Header="Dashboard">
+        <Grid Margin="0,16,0,0"
+              RowDefinitions="Auto,*,Auto">
+          <Grid ColumnDefinitions="*,*,*"
+                Margin="0,0,0,16">
+            <Border Grid.Column="0"
+                    Margin="0,0,12,0"
+                    Padding="16"
+                    Background="{StaticResource PanelBrush}"
+                    CornerRadius="14">
+              <StackPanel>
+                <TextBlock FontWeight="SemiBold" Text="Toggle Hotkey" />
+                <TextBlock Margin="0,10,0,0"
+                           FontSize="22"
+                           Foreground="{StaticResource AccentBrush}"
+                           Text="{Binding Settings.Hotkeys.ToggleRecordingGesture}" />
+              </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1"
+                    Margin="0,0,12,0"
+                    Padding="16"
+                    Background="{StaticResource PanelBrush}"
+                    CornerRadius="14">
+              <StackPanel>
+                <TextBlock FontWeight="SemiBold" Text="Cancel Hotkey" />
+                <TextBlock Margin="0,10,0,0"
+                           FontSize="22"
+                           Foreground="{StaticResource AccentBrush}"
+                           Text="{Binding Settings.Hotkeys.CancelRecordingGesture}" />
+              </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2"
+                    Padding="16"
+                    Background="{StaticResource PanelBrush}"
+                    CornerRadius="14">
+              <StackPanel>
+                <TextBlock FontWeight="SemiBold" Text="Model Status" />
+                <TextBlock Margin="0,10,0,0"
+                           Text="{Binding ActiveModelSummary}"
+                           TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </Grid>
+
+          <Border Grid.Row="1"
+                  Padding="16"
+                  Background="{StaticResource PanelBrush}"
+                  CornerRadius="14">
+            <Grid RowDefinitions="Auto,*">
+              <TextBlock FontSize="18"
+                         FontWeight="SemiBold"
+                         Text="Latest Transcript" />
+              <TextBox Grid.Row="1"
+                       Margin="0,12,0,0"
+                       AcceptsReturn="True"
+                       IsReadOnly="True"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto"
+                       Text="{Binding CurrentTranscript, Mode=OneWay}"
+                       TextWrapping="Wrap" />
+            </Grid>
+          </Border>
+
+          <Border Grid.Row="2"
+                  Margin="0,16,0,0"
+                  Padding="16"
+                  Background="{StaticResource PanelBrush}"
+                  CornerRadius="14">
+            <StackPanel>
+              <TextBlock FontSize="16"
+                         FontWeight="SemiBold"
+                         Text="Diagnostics" />
+              <TextBlock Margin="0,10,0,0"
+                         Text="{Binding LastError}"
+                         TextWrapping="Wrap" />
+              <TextBlock Margin="0,12,0,0"
+                         Foreground="{StaticResource TextBrush}"
+                         Opacity="0.7"
+                         Text="{Binding PersistenceSummary}"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="File Transcription">
+        <Grid Margin="0,16,0,0"
+              RowDefinitions="Auto,Auto,*">
+          <Border Padding="16"
+                  Background="{StaticResource PanelBrush}"
+                  CornerRadius="14">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <TextBox Margin="0,0,12,0"
+                       VerticalContentAlignment="Center"
+                       Text="{Binding SelectedFilePath, Mode=TwoWay}" />
+              <Button Grid.Column="1"
+                      Width="110"
+                      Margin="0,0,12,0"
+                      Command="{Binding BrowseFileCommand}"
+                      Content="Browse" />
+              <Button Grid.Column="2"
+                      Width="140"
+                      Background="{StaticResource AccentBrush}"
+                      Command="{Binding TranscribeFileCommand}"
+                      Content="Transcribe File"
+                      Foreground="White" />
+            </Grid>
+          </Border>
+
+          <StackPanel Grid.Row="1"
+                      Margin="0,16,0,16"
+                      Orientation="Horizontal">
+            <Button Width="90"
+                    Margin="0,0,12,0"
+                    Command="{Binding PlayPreviewCommand}"
+                    Content="Play" />
+            <Button Width="90"
+                    Margin="0,0,12,0"
+                    Command="{Binding PausePreviewCommand}"
+                    Content="Pause" />
+            <Button Width="90"
+                    Command="{Binding StopPreviewCommand}"
+                    Content="Stop" />
+          </StackPanel>
+
+          <Border Grid.Row="2"
+                  Padding="16"
+                  Background="{StaticResource PanelBrush}"
+                  CornerRadius="14">
+            <Grid RowDefinitions="Auto,*">
+              <TextBlock FontSize="18"
+                         FontWeight="SemiBold"
+                         Text="File Transcript" />
+              <TextBox Grid.Row="1"
+                       Margin="0,12,0,0"
+                       AcceptsReturn="True"
+                       IsReadOnly="True"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto"
+                       Text="{Binding FileTranscript, Mode=OneWay}"
+                       TextWrapping="Wrap" />
+            </Grid>
+          </Border>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Settings">
+        <ScrollViewer Margin="0,16,0,0"
+                      VerticalScrollBarVisibility="Auto">
+          <Grid ColumnDefinitions="*,*">
+            <StackPanel Margin="0,0,12,0">
+              <Border Padding="16"
+                      Background="{StaticResource PanelBrush}"
+                      CornerRadius="14">
+                <StackPanel>
+                  <TextBlock FontSize="18"
+                             FontWeight="SemiBold"
+                             Text="Transcription" />
+                  <TextBlock Margin="0,16,0,4" Text="Language Mode" />
+                  <ComboBox ItemsSource="{Binding Languages}"
+                            SelectedItem="{Binding Settings.Transcription.LanguageMode}" />
+                  <TextBlock Margin="0,16,0,4" Text="Recording Model" />
+                  <ComboBox ItemsSource="{Binding ModelPresets}"
+                            SelectedItem="{Binding Settings.Transcription.RecordingModelPreset}" />
+                  <TextBlock Margin="0,16,0,4" Text="File Model" />
+                  <ComboBox ItemsSource="{Binding ModelPresets}"
+                            SelectedItem="{Binding Settings.Transcription.FileModelPreset}" />
+                  <TextBlock Margin="0,16,0,4" Text="Microphone Threads" />
+                  <TextBox Text="{Binding Settings.Transcription.RecordingThreadCount}" />
+                  <TextBlock Margin="0,16,0,4" Text="File Threads" />
+                  <TextBox Text="{Binding Settings.Transcription.FileThreadCount}" />
+                  <TextBlock Margin="0,16,0,4" Text="Custom Model ID" />
+                  <TextBox Text="{Binding Settings.Transcription.CustomModelId}" />
+                  <TextBlock Margin="0,16,0,4" Text="Custom Model Path" />
+                  <TextBox Text="{Binding Settings.Transcription.CustomModelPath}" />
+                  <TextBlock Margin="0,12,0,0"
+                             Opacity="0.7"
+                             Text="Whisper.net uses local ggml model files. If Custom Model Path points to a local file, it takes priority over preset mapping."
+                             TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Border Margin="0,16,0,0"
+                      Padding="16"
+                      Background="{StaticResource PanelBrush}"
+                      CornerRadius="14">
+                <StackPanel>
+                  <TextBlock FontSize="18"
+                             FontWeight="SemiBold"
+                             Text="Hotkeys" />
+                  <TextBlock Margin="0,16,0,4" Text="Start / Stop Recording" />
+                  <TextBox IsReadOnly="True"
+                           KeyDown="OnHotkeyTextBoxKeyDown"
+                           Tag="ToggleRecording"
+                           Text="{Binding Settings.Hotkeys.ToggleRecordingGesture}" />
+                  <TextBlock Margin="0,16,0,4" Text="Cancel Recording" />
+                  <TextBox IsReadOnly="True"
+                           KeyDown="OnHotkeyTextBoxKeyDown"
+                           Tag="CancelRecording"
+                           Text="{Binding Settings.Hotkeys.CancelRecordingGesture}" />
+                  <TextBlock Margin="0,10,0,0"
+                             Opacity="0.7"
+                             Text="Click a field and press the desired shortcut. Modifier-only shortcuts are ignored. Save settings to persist and reapply the new hotkeys."
+                             TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1"
+                        Margin="12,0,0,0">
+              <Border Padding="16"
+                      Background="{StaticResource PanelBrush}"
+                      CornerRadius="14">
+                <StackPanel>
+                  <TextBlock FontSize="18"
+                             FontWeight="SemiBold"
+                             Text="Audio + Paste" />
+                  <TextBlock Margin="0,16,0,4" Text="Preferred Input Device Number" />
+                  <TextBox Text="{Binding PreferredInputDeviceNumberText}" />
+                  <CheckBox Margin="0,16,0,0"
+                            Content="Enable feedback sounds"
+                            IsChecked="{Binding Settings.Audio.EnableFeedbackSounds}" />
+                  <CheckBox Margin="0,8,0,0"
+                            Content="Enable near-realtime live preview placeholder"
+                            IsChecked="{Binding Settings.Audio.EnableLivePreview}" />
+                  <CheckBox Margin="0,8,0,0"
+                            Content="Restore clipboard after paste"
+                            IsChecked="{Binding Settings.Paste.RestoreClipboardAfterPaste}" />
+                </StackPanel>
+              </Border>
+
+              <Border Margin="0,16,0,0"
+                      Padding="16"
+                      Background="{StaticResource PanelBrush}"
+                      CornerRadius="14">
+                <StackPanel>
+                  <TextBlock FontSize="18"
+                             FontWeight="SemiBold"
+                             Text="Logging" />
+                  <CheckBox Margin="0,16,0,0"
+                            Content="Enable activity log"
+                            IsChecked="{Binding Settings.Logging.EnableLogging}" />
+                  <CheckBox Margin="0,8,0,0"
+                            Content="Write transcript history"
+                            IsChecked="{Binding Settings.Logging.WriteTranscriptHistory}" />
+                  <TextBlock Margin="0,16,0,0"
+                             Text="{Binding PersistenceSummary}"
+                             TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Border Margin="0,16,0,0"
+                      Padding="16"
+                      Background="{StaticResource PanelBrush}"
+                      CornerRadius="14">
+                <StackPanel>
+                  <TextBlock FontSize="18"
+                             FontWeight="SemiBold"
+                             Text="Model Tools" />
+                  <Button Margin="0,16,0,0"
+                          Background="{StaticResource AccentBrush}"
+                          Command="{Binding DownloadModelCommand}"
+                          Content="Download Selected Model"
+                          Foreground="White" />
+                  <Button Margin="0,12,0,0"
+                          Command="{Binding SaveSettingsCommand}"
+                          Content="Save Settings" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Grid>
+        </ScrollViewer>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</Window>

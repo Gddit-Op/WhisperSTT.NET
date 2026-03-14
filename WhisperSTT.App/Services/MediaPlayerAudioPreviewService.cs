@@ -1,38 +1,56 @@
-using System.Windows.Media;
+using NAudio.Wave;
 using WhisperSTT.Core.Services;
 
 namespace WhisperSTT.App.Services;
 
 public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
 {
-    private readonly MediaPlayer _player = new();
+    private WaveOutEvent? _waveOut;
+    private AudioFileReader? _audioFileReader;
     private string? _loadedFilePath;
 
     public bool IsLoaded => !string.IsNullOrWhiteSpace(_loadedFilePath);
 
     public void Load(string filePath)
     {
+        DisposePlayback();
         _loadedFilePath = filePath;
-        _player.Open(new Uri(filePath));
+        _audioFileReader = new AudioFileReader(filePath);
+        _waveOut = new WaveOutEvent();
+        _waveOut.Init(_audioFileReader);
     }
 
     public void Play()
     {
-        _player.Play();
+        _waveOut?.Play();
     }
 
     public void Pause()
     {
-        _player.Pause();
+        _waveOut?.Pause();
     }
 
     public void Stop()
     {
-        _player.Stop();
+        _waveOut?.Stop();
+        if (_audioFileReader is not null)
+        {
+            _audioFileReader.Position = 0;
+        }
     }
 
     public void Dispose()
     {
-        _player.Close();
+        DisposePlayback();
+    }
+
+    private void DisposePlayback()
+    {
+        _waveOut?.Stop();
+        _waveOut?.Dispose();
+        _waveOut = null;
+
+        _audioFileReader?.Dispose();
+        _audioFileReader = null;
     }
 }

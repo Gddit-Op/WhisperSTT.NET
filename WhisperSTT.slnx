@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="WhisperSTT.App/WhisperSTT.App.csproj" />
+  <Project Path="WhisperSTT.Core/WhisperSTT.Core.csproj" />
+</Solution>

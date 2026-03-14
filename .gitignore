@@ -1,0 +1,43 @@
+# Build outputs
+bin/
+obj/
+out/
+publish/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Logs and diagnostics
+*.log
+*.tlog
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# Coverage
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+
+# Generated caches
+*.cache
+*.tmp
+*.temp
+
+# OS files
+Thumbs.db
+Desktop.ini

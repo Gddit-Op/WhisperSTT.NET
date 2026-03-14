@@ -70,6 +70,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public Array Languages { get; } = Enum.GetValues<LanguageMode>();
 
+    public Array RuntimePreferences { get; } = Enum.GetValues<WhisperRuntimePreference>();
+
     public Array ModelPresets { get; } = Enum.GetValues<ModelPreset>();
 
     public AsyncRelayCommand ToggleRecordingCommand { get; }
@@ -322,11 +324,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             modelPath,
             Settings.Transcription.LanguageMode,
             Math.Max(1, threadCount),
+            Settings.Transcription.RuntimePreference,
             Settings.Audio.EnableLivePreview)).ConfigureAwait(true);
 
         var detectedLanguageText = string.IsNullOrWhiteSpace(result.DetectedLanguage)
             ? "unknown"
             : result.DetectedLanguage;
+        var usedRuntimeText = string.IsNullOrWhiteSpace(result.UsedRuntime)
+            ? "unknown"
+            : result.UsedRuntime;
+        await LogAsync($"Configured runtime: {Settings.Transcription.RuntimePreference}.").ConfigureAwait(true);
+        await LogAsync($"Used runtime: {usedRuntimeText}.").ConfigureAwait(true);
         await LogAsync($"Detected language: {detectedLanguageText}.").ConfigureAwait(true);
         await LogAsync($"Transcription completed with model {modelPath}.").ConfigureAwait(true);
         return result;

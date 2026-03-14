@@ -33,6 +33,8 @@ public sealed class TranscriptionSettings
 {
     public LanguageMode LanguageMode { get; set; } = LanguageMode.Auto;
 
+    public WhisperRuntimePreference RuntimePreference { get; set; } = WhisperRuntimePreference.Auto;
+
     public ModelPreset RecordingModelPreset { get; set; } = ModelPreset.Small;
 
     public ModelPreset FileModelPreset { get; set; } = ModelPreset.Small;

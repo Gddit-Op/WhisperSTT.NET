@@ -24,3 +24,12 @@ public enum ModelPreset
     LargeV3,
     LargeV3Turbo
 }
+
+public enum WhisperRuntimePreference
+{
+    Auto,
+    Cpu,
+    OpenVino,
+    Vulkan,
+    Cuda
+}

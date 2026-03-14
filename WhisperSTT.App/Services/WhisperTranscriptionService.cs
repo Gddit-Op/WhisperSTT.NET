@@ -1,6 +1,7 @@
 using System.IO;
 using NAudio.Wave;
 using Whisper.net;
+using Whisper.net.LibraryLoader;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
 
@@ -33,8 +34,12 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         }
 
         waveStream.Position = 0;
+        RuntimeOptions.RuntimeLibraryOrder = GetRuntimeOrder(request.RuntimePreference);
 
         using var whisperFactory = WhisperFactory.FromPath(request.ModelPath);
+        var usedRuntime = RuntimeOptions.LoadedLibrary?.ToString()
+            ?? WhisperFactory.GetRuntimeInfo()?.ToString()
+            ?? "unknown";
         var builder = whisperFactory.CreateBuilder()
             .WithThreads(Math.Max(1, request.ThreadCount));
 
@@ -70,6 +75,39 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
             .Select(group => group.Key)
             .FirstOrDefault();
 
-        return new TranscriptionResult(text, segments, duration, request.ModelPath, detectedLanguage);
+        return new TranscriptionResult(text, segments, duration, request.ModelPath, detectedLanguage, usedRuntime);
+    }
+
+    private static List<RuntimeLibrary> GetRuntimeOrder(WhisperRuntimePreference preference)
+    {
+        return preference switch
+        {
+            WhisperRuntimePreference.Cpu =>
+            [
+                RuntimeLibrary.Cpu
+            ],
+            WhisperRuntimePreference.OpenVino =>
+            [
+                RuntimeLibrary.OpenVino,
+                RuntimeLibrary.Cpu
+            ],
+            WhisperRuntimePreference.Vulkan =>
+            [
+                RuntimeLibrary.Vulkan,
+                RuntimeLibrary.Cpu
+            ],
+            WhisperRuntimePreference.Cuda =>
+            [
+                RuntimeLibrary.Cuda,
+                RuntimeLibrary.Cpu
+            ],
+            _ =>
+            [
+                RuntimeLibrary.Cuda,
+                RuntimeLibrary.Vulkan,
+                RuntimeLibrary.OpenVino,
+                RuntimeLibrary.Cpu
+            ]
+        };
     }
 }

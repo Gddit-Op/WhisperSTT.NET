@@ -16,6 +16,7 @@ Implemented:
 - Offline file and microphone transcription via `Whisper.net`
 - Language mode selection: `auto`, `de`, `en`
 - Explicit Whisper language detection when `auto` is selected
+- Runtime selection: `Auto`, `Cpu`, `OpenVino`, `Vulkan`, `Cuda`
 - Model preset selection
 - Model download button for preset Whisper models
 - File transcription page for `*.wav` and `*.mp3`
@@ -38,6 +39,7 @@ Not fully implemented yet:
 - Start/stop recording with one hotkey, cancel with another
 - Offline transcription with `Whisper.net`
 - Language mode: `auto`, `de`, `en`
+- Runtime mode: `Auto`, `Cpu`, `OpenVino`, `Vulkan`, `Cuda`
 - Automatic language detection for `auto` mode with detected language shown in the UI and written to `app.log`
 - Model presets: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`
 - Separate thread settings for microphone and file transcription
@@ -77,7 +79,7 @@ Note:
 
 ## CPU and Memory Guidance
 
-WhisperSTT currently runs on CPU by default.
+WhisperSTT can run with CPU or supported accelerated Whisper runtimes.
 
 Approximate guidance:
 
@@ -91,6 +93,8 @@ Notes:
 
 - Performance depends on CPU cores, audio length, and system load.
 - If transcription feels too slow, use `small` or `medium`.
+- `Auto` currently prefers `Cuda`, then `Vulkan`, then `OpenVino`, then `Cpu`.
+- `Cuda`, `OpenVino`, and `Vulkan` still require the matching drivers and native prerequisites on the machine.
 
 ## Tech Stack
 
@@ -147,10 +151,11 @@ Microphone dictation flow:
 2. Audio is captured to a temporary `.wav` file in `%APPDATA%/WhisperNET/temp`.
 3. Stopping the recording starts Whisper transcription.
 4. If `Language Mode` is `auto`, Whisper language detection is enabled explicitly.
-5. The recognized text is copied to the clipboard.
-6. `Ctrl+V` is sent to the focused application.
-7. The previous clipboard content is restored if that option is enabled.
-8. The detected language is shown in the UI and written to `app.log`.
+5. The configured runtime preference is applied before Whisper is created.
+6. The recognized text is copied to the clipboard.
+7. `Ctrl+V` is sent to the focused application.
+8. The previous clipboard content is restored if that option is enabled.
+9. The detected language is shown in the UI and written to `app.log`.
 
 File transcription flow:
 
@@ -188,6 +193,7 @@ Current settings structure:
   },
   "Transcription": {
     "LanguageMode": "Auto",
+    "RuntimePreference": "Auto",
     "RecordingModelPreset": "Small",
     "FileModelPreset": "Small",
     "RecordingThreadCount": 4,
@@ -209,6 +215,7 @@ Current settings structure:
 Note:
 
 - `RecordingThreadCount` and `FileThreadCount` depend on your CPU and may differ from the example above.
+- `RuntimePreference` controls the `Whisper.net` runtime order globally before each transcription.
 
 ## Model Handling
 
@@ -233,6 +240,7 @@ Model resolution order:
 ## UI Notes
 
 - The app starts hidden to the system tray.
+- The `Settings` page includes a runtime selector for `Auto`, `Cpu`, `OpenVino`, `Vulkan`, and `Cuda`.
 - The tray icon and the window/taskbar icon change color by state:
 - `Idle` = green
 - `Recording` = red
@@ -248,6 +256,7 @@ The activity log is stored at:
 
 Current relevant log entries include:
 
+- `Configured runtime: Vulkan.`
 - `Detected language: de.`
 - `Transcription completed with model ...`
 - Clipboard and runtime errors
@@ -267,6 +276,7 @@ Current relevant log entries include:
 These commands were run successfully in this repository:
 
 ```powershell
+dotnet build .\WhisperSTT.App\WhisperSTT.App.csproj -c Debug
 dotnet build .\WhisperSTTClassic.sln -c Debug
 ```
 

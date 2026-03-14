@@ -13,4 +13,5 @@ public sealed record TranscriptionResult(
     string Text,
     IReadOnlyList<TranscriptionSegment> Segments,
     TimeSpan Duration,
-    string ModelPath);
+    string ModelPath,
+    string? DetectedLanguage = null);

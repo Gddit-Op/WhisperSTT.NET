@@ -38,7 +38,11 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         var builder = whisperFactory.CreateBuilder()
             .WithThreads(Math.Max(1, request.ThreadCount));
 
-        if (request.LanguageMode != LanguageMode.Auto)
+        if (request.LanguageMode == LanguageMode.Auto)
+        {
+            builder = builder.WithLanguageDetection();
+        }
+        else
         {
             builder = builder.WithLanguage(request.LanguageMode == LanguageMode.De ? "de" : "en");
         }
@@ -46,14 +50,26 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         using var processor = builder.Build();
 
         var segments = new List<TranscriptionSegment>();
+        var detectedLanguages = new List<string>();
         await foreach (var segment in processor.ProcessAsync(waveStream))
         {
             cancellationToken.ThrowIfCancellationRequested();
             segments.Add(new TranscriptionSegment(segment.Start, segment.End, segment.Text));
+
+            if (!string.IsNullOrWhiteSpace(segment.Language))
+            {
+                detectedLanguages.Add(segment.Language);
+            }
         }
 
         var text = string.Join(" ", segments.Select(segment => segment.Text).Where(segment => !string.IsNullOrWhiteSpace(segment))).Trim();
         var duration = segments.Count == 0 ? TimeSpan.Zero : segments[^1].End;
-        return new TranscriptionResult(text, segments, duration, request.ModelPath);
+        var detectedLanguage = detectedLanguages
+            .GroupBy(language => language, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .Select(group => group.Key)
+            .FirstOrDefault();
+
+        return new TranscriptionResult(text, segments, duration, request.ModelPath, detectedLanguage);
     }
 }

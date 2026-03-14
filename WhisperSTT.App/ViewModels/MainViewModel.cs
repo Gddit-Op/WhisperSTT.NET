@@ -26,6 +26,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _fileTranscript = string.Empty;
     private string _selectedFilePath;
     private string _lastError = "No errors.";
+    private string _lastDetectedLanguage = "unknown";
     private string _preferredInputDeviceNumberText;
 
     public MainViewModel(
@@ -151,6 +152,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _lastError, value);
     }
 
+    public string LastDetectedLanguage
+    {
+        get => _lastDetectedLanguage;
+        private set
+        {
+            if (SetProperty(ref _lastDetectedLanguage, value))
+            {
+                OnPropertyChanged(nameof(DetectedLanguageText));
+            }
+        }
+    }
+
+    public string DetectedLanguageText => $"Detected language: {LastDetectedLanguage}";
+
     public string PreferredInputDeviceNumberText
     {
         get => _preferredInputDeviceNumberText;
@@ -246,21 +261,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         SetStatus(AppStatus.Transcribing, "Transcribing microphone input");
-        var transcript = await TranscribeAsync(
+        var result = await TranscribeAsync(
             audioPath,
             Settings.Transcription.RecordingModelPreset,
             Settings.Transcription.RecordingThreadCount).ConfigureAwait(true);
 
-        CurrentTranscript = transcript;
-        if (!string.IsNullOrWhiteSpace(transcript))
+        CurrentTranscript = result.Text;
+        UpdateDetectedLanguage(result.DetectedLanguage);
+        if (!string.IsNullOrWhiteSpace(result.Text))
         {
             await _pasteService.PasteTextAsync(
-                transcript,
+                result.Text,
                 Settings.Paste.RestoreClipboardAfterPaste).ConfigureAwait(true);
 
             if (Settings.Logging.WriteTranscriptHistory)
             {
-                await _historyService.AppendAsync(transcript).ConfigureAwait(true);
+                await _historyService.AppendAsync(result.Text).ConfigureAwait(true);
             }
         }
 
@@ -268,7 +284,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PlayFeedbackSound(SystemSounds.Exclamation);
     }
 
-    private async Task<string> TranscribeAsync(string audioPath, ModelPreset preset, int threadCount)
+    private async Task<TranscriptionResult> TranscribeAsync(string audioPath, ModelPreset preset, int threadCount)
     {
         var modelPath = _modelManagementService.ResolveModelPath(Settings, preset);
         if (!File.Exists(modelPath))
@@ -285,8 +301,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Math.Max(1, threadCount),
             Settings.Audio.EnableLivePreview)).ConfigureAwait(true);
 
+        var detectedLanguageText = string.IsNullOrWhiteSpace(result.DetectedLanguage)
+            ? "unknown"
+            : result.DetectedLanguage;
+        await LogAsync($"Detected language: {detectedLanguageText}.").ConfigureAwait(true);
         await LogAsync($"Transcription completed with model {modelPath}.").ConfigureAwait(true);
-        return result.Text;
+        return result;
     }
 
     private void BrowseFile()
@@ -310,10 +330,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             SetStatus(AppStatus.Transcribing, "Transcribing local file");
-            FileTranscript = await TranscribeAsync(
+            var result = await TranscribeAsync(
                 SelectedFilePath,
                 Settings.Transcription.FileModelPreset,
                 Settings.Transcription.FileThreadCount).ConfigureAwait(true);
+            FileTranscript = result.Text;
+            UpdateDetectedLanguage(result.DetectedLanguage);
 
             if (Settings.Logging.WriteTranscriptHistory)
             {
@@ -395,6 +417,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LastError = exception.Message;
         SetStatus(AppStatus.Error, "Error");
         await LogAsync($"Error: {exception}").ConfigureAwait(true);
+    }
+
+    private void UpdateDetectedLanguage(string? detectedLanguage)
+    {
+        LastDetectedLanguage = string.IsNullOrWhiteSpace(detectedLanguage)
+            ? "unknown"
+            : detectedLanguage;
     }
 
     private async Task LogAsync(string message)

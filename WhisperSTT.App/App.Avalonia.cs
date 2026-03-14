@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using Drawing = System.Drawing;
 using WhisperSTT.App.Services;
 using WhisperSTT.App.ViewModels;
 using WhisperSTT.Core.Models;
@@ -18,6 +17,7 @@ public partial class App : Avalonia.Application
     private MainViewModel? _viewModel;
     private Forms.NotifyIcon? _trayIcon;
     private Forms.ToolStripMenuItem? _toggleRecordingMenuItem;
+    private StatusIconSet? _statusIcons;
     private bool _isExiting;
     private IClassicDesktopStyleApplicationLifetime? _desktopLifetime;
 
@@ -89,6 +89,7 @@ public partial class App : Avalonia.Application
     private void OnDesktopLifetimeExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
     {
         _trayIcon?.Dispose();
+        _statusIcons?.Dispose();
         _viewModel?.Dispose();
     }
 
@@ -120,7 +121,6 @@ public partial class App : Avalonia.Application
 
         _trayIcon = new Forms.NotifyIcon
         {
-            Icon = Drawing.SystemIcons.Application,
             Visible = true,
             ContextMenuStrip = contextMenu,
             Text = "WhisperSTT"
@@ -157,6 +157,8 @@ public partial class App : Avalonia.Application
             var tooltip = $"WhisperSTT - {_viewModel.StatusText}";
             _trayIcon.Text = tooltip.Length > 63 ? tooltip[..63] : tooltip;
         }
+
+        UpdateStatusIcons(_viewModel.Status);
     }
 
     private void OnMainWindowClosing(object? sender, WindowClosingEventArgs e)
@@ -180,5 +182,23 @@ public partial class App : Avalonia.Application
         }
 
         _desktopLifetime?.Shutdown();
+    }
+
+    private void UpdateStatusIcons(AppStatus status)
+    {
+        var previousIcons = _statusIcons;
+        _statusIcons = StatusIconFactory.Create(status);
+
+        if (_trayIcon is not null)
+        {
+            _trayIcon.Icon = _statusIcons.TrayIcon;
+        }
+
+        if (_window is not null)
+        {
+            _window.Icon = _statusIcons.WindowIcon;
+        }
+
+        previousIcons?.Dispose();
     }
 }

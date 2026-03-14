@@ -226,6 +226,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public void NotifyHotkeyValuesChanged()
+    {
+        OnPropertyChanged(nameof(Settings));
+    }
+
     public void Dispose()
     {
         _audioPreviewService.Dispose();

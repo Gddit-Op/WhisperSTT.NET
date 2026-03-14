@@ -289,9 +289,19 @@
                                                FontWeight="SemiBold"
                                                Text="Hotkeys" />
                                     <TextBlock Margin="0,16,0,4" Text="Start / Stop Recording" />
-                                    <TextBox Text="{Binding Settings.Hotkeys.ToggleRecordingGesture, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBox IsReadOnly="True"
+                                             PreviewKeyDown="OnHotkeyTextBoxPreviewKeyDown"
+                                             Tag="ToggleRecording"
+                                             Text="{Binding Settings.Hotkeys.ToggleRecordingGesture, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock Margin="0,16,0,4" Text="Cancel Recording" />
-                                    <TextBox Text="{Binding Settings.Hotkeys.CancelRecordingGesture, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBox IsReadOnly="True"
+                                             PreviewKeyDown="OnHotkeyTextBoxPreviewKeyDown"
+                                             Tag="CancelRecording"
+                                             Text="{Binding Settings.Hotkeys.CancelRecordingGesture, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,10,0,0"
+                                               Opacity="0.7"
+                                               Text="Click a field and press the desired shortcut. Modifier-only shortcuts are ignored. Save settings to persist and reapply the new hotkeys."
+                                               TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

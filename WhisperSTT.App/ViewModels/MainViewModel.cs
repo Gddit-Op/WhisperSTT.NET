@@ -64,6 +64,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PlayPreviewCommand = new RelayCommand(PlayPreview, CanPreviewFile);
         PausePreviewCommand = new RelayCommand(PausePreview, () => _audioPreviewService.IsLoaded);
         StopPreviewCommand = new RelayCommand(StopPreview, () => _audioPreviewService.IsLoaded);
+
+        InitializePreviewState();
     }
 
     public event EventHandler? HotkeysChanged;
@@ -153,6 +155,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _selectedFilePath, value))
             {
                 Settings.Transcription.LastFilePath = value;
+                if (!string.Equals(_audioPreviewService.LoadedFilePath, value, StringComparison.OrdinalIgnoreCase))
+                {
+                    _audioPreviewService.Unload();
+                }
+
                 OnPropertyChanged(nameof(ActiveModelSummary));
                 RaiseCommandStates();
             }
@@ -409,16 +416,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _audioPreviewService.Play();
+        RaiseCommandStates();
     }
 
     private void PausePreview()
     {
         _audioPreviewService.Pause();
+        RaiseCommandStates();
     }
 
     private void StopPreview()
     {
         _audioPreviewService.Stop();
+        RaiseCommandStates();
     }
 
     private bool CanTranscribeFile()
@@ -443,6 +453,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             _audioPreviewService.Load(filePath);
+            RaiseCommandStates();
             return true;
         }
         catch (Exception exception)
@@ -452,6 +463,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             RaiseCommandStates();
             return false;
         }
+    }
+
+    private void InitializePreviewState()
+    {
+        if (!string.IsNullOrWhiteSpace(_selectedFilePath) && File.Exists(_selectedFilePath))
+        {
+            TryLoadPreview(_selectedFilePath);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_selectedFilePath) && !File.Exists(_selectedFilePath))
+        {
+            Settings.Transcription.LastFilePath = string.Empty;
+            _selectedFilePath = string.Empty;
+        }
+
+        RaiseCommandStates();
     }
 
     private void ApplyPreferredInputDeviceSetting()

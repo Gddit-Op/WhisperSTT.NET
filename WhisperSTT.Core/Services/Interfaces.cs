@@ -74,7 +74,11 @@ public interface IAudioPreviewService : IDisposable
 {
     bool IsLoaded { get; }
 
+    string? LoadedFilePath { get; }
+
     void Load(string filePath);
+
+    void Unload();
 
     void Play();
 

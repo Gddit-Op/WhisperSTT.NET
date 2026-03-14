@@ -12,8 +12,15 @@ public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
 
     public bool IsLoaded => !string.IsNullOrWhiteSpace(_loadedFilePath);
 
+    public string? LoadedFilePath => _loadedFilePath;
+
     public void Load(string filePath)
     {
+        if (string.Equals(_loadedFilePath, filePath, StringComparison.OrdinalIgnoreCase) && _waveOut is not null)
+        {
+            return;
+        }
+
         DisposePlayback();
 
         var reader = new AudioFileReader(filePath);
@@ -35,6 +42,11 @@ public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
     public void Play()
     {
         _waveOut?.Play();
+    }
+
+    public void Unload()
+    {
+        DisposePlayback();
     }
 
     public void Pause()

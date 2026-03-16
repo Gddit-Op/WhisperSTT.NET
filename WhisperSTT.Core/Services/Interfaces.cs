@@ -29,6 +29,11 @@ public interface IAudioRecorderService
     Task CancelRecordingAsync(CancellationToken cancellationToken = default);
 }
 
+public interface IAudioInputDeviceService
+{
+    IReadOnlyList<AudioInputDeviceOption> GetAvailableDevices();
+}
+
 public interface IPasteService
 {
     Task CopyTextToClipboardAsync(

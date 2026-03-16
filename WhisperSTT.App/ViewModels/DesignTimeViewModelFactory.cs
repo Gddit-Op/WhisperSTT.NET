@@ -20,6 +20,7 @@ internal static class DesignTimeViewModelFactory
             new WhisperModelService(paths),
             new WhisperTranscriptionService(logger),
             new NAudioRecorderService(paths),
+            new AudioInputDeviceService(),
             new ClipboardPasteService(),
             new AvaloniaFilePickerService(),
             new MediaPlayerAudioPreviewService());

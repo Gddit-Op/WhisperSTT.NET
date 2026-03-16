@@ -7,6 +7,7 @@ namespace WhisperSTT.App.Services;
 
 public sealed class NAudioRecorderService : IAudioRecorderService
 {
+    private const int WaveHeaderSizeBytes = 44;
     private readonly ApplicationPaths _paths;
     private readonly object _syncRoot = new();
     private WaveInEvent? _waveIn;
@@ -14,6 +15,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService
     private TaskCompletionSource<string>? _recordingStoppedSource;
     private string? _currentFilePath;
     private bool _discardOnStop;
+    private long _recordedByteCount;
 
     public NAudioRecorderService(ApplicationPaths paths)
     {
@@ -67,6 +69,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             _currentFilePath = currentFilePath;
             _recordingStoppedSource = recordingStoppedSource;
             _discardOnStop = false;
+            _recordedByteCount = 0;
             _waveIn = waveIn;
             _writer = writer;
         }
@@ -120,8 +123,14 @@ public sealed class NAudioRecorderService : IAudioRecorderService
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
+        if (e.BytesRecorded <= 0)
+        {
+            return;
+        }
+
         _writer?.Write(e.Buffer, 0, e.BytesRecorded);
         _writer?.Flush();
+        Interlocked.Add(ref _recordedByteCount, e.BytesRecorded);
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
@@ -131,6 +140,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService
         TaskCompletionSource<string>? recordingStoppedSource;
         string currentFilePath;
         bool discardOnStop;
+        long recordedByteCount;
 
         lock (_syncRoot)
         {
@@ -142,6 +152,8 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             currentFilePath = _currentFilePath ?? string.Empty;
             _currentFilePath = null;
             discardOnStop = _discardOnStop;
+            recordedByteCount = _recordedByteCount;
+            _recordedByteCount = 0;
         }
 
         if (waveIn is not null)
@@ -170,7 +182,34 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             return;
         }
 
+        if (!HasUsableAudioData(currentFilePath, recordedByteCount))
+        {
+            if (!string.IsNullOrWhiteSpace(currentFilePath) && File.Exists(currentFilePath))
+            {
+                File.Delete(currentFilePath);
+            }
+
+            recordingStoppedSource?.TrySetResult(string.Empty);
+            return;
+        }
+
         recordingStoppedSource?.TrySetResult(currentFilePath);
+    }
+
+    private static bool HasUsableAudioData(string filePath, long recordedByteCount)
+    {
+        if (recordedByteCount > 0)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return false;
+        }
+
+        var fileLength = new FileInfo(filePath).Length;
+        return fileLength > WaveHeaderSizeBytes;
     }
 
     private static bool IsBenignStopException(Exception exception)

@@ -17,6 +17,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly IModelManagementService _modelManagementService;
     private readonly ITranscriptionService _transcriptionService;
     private readonly IAudioRecorderService _audioRecorderService;
+    private readonly IAudioInputDeviceService _audioInputDeviceService;
     private readonly IPasteService _pasteService;
     private readonly IFilePickerService _filePickerService;
     private readonly IAudioPreviewService _audioPreviewService;
@@ -27,7 +28,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _selectedFilePath;
     private string _lastError = "No errors.";
     private string _lastDetectedLanguage = "unknown";
-    private string _preferredInputDeviceNumberText;
+    private IReadOnlyList<AudioInputDeviceOption> _inputDevices = [];
+    private AudioInputDeviceOption? _selectedInputDevice;
 
     public MainViewModel(
         AppSettings settings,
@@ -37,6 +39,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IModelManagementService modelManagementService,
         ITranscriptionService transcriptionService,
         IAudioRecorderService audioRecorderService,
+        IAudioInputDeviceService audioInputDeviceService,
         IPasteService pasteService,
         IFilePickerService filePickerService,
         IAudioPreviewService audioPreviewService)
@@ -48,11 +51,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _modelManagementService = modelManagementService;
         _transcriptionService = transcriptionService;
         _audioRecorderService = audioRecorderService;
+        _audioInputDeviceService = audioInputDeviceService;
         _pasteService = pasteService;
         _filePickerService = filePickerService;
         _audioPreviewService = audioPreviewService;
         _selectedFilePath = settings.Transcription.LastFilePath;
-        _preferredInputDeviceNumberText = settings.Audio.PreferredInputDeviceNumber?.ToString() ?? string.Empty;
 
         ToggleRecordingCommand = new AsyncRelayCommand(ToggleRecordingAsync, () => Status != AppStatus.Transcribing);
         CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording || _audioRecorderService.IsRecording);
@@ -64,7 +67,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PlayPreviewCommand = new RelayCommand(PlayPreview, CanPreviewFile);
         PausePreviewCommand = new RelayCommand(PausePreview, () => _audioPreviewService.IsLoaded);
         StopPreviewCommand = new RelayCommand(StopPreview, () => _audioPreviewService.IsLoaded);
+        RefreshInputDevicesCommand = new RelayCommand(RefreshInputDevices);
 
+        RefreshInputDevices();
         InitializePreviewState();
     }
 
@@ -97,6 +102,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand PausePreviewCommand { get; }
 
     public RelayCommand StopPreviewCommand { get; }
+
+    public RelayCommand RefreshInputDevicesCommand { get; }
 
     public AppStatus Status
     {
@@ -186,10 +193,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string DetectedLanguageText => $"Detected language: {LastDetectedLanguage}";
 
-    public string PreferredInputDeviceNumberText
+    public IReadOnlyList<AudioInputDeviceOption> InputDevices
     {
-        get => _preferredInputDeviceNumberText;
-        set => SetProperty(ref _preferredInputDeviceNumberText, value);
+        get => _inputDevices;
+        private set => SetProperty(ref _inputDevices, value);
+    }
+
+    public AudioInputDeviceOption? SelectedInputDevice
+    {
+        get => _selectedInputDevice;
+        set
+        {
+            if (SetProperty(ref _selectedInputDevice, value))
+            {
+                Settings.Audio.PreferredInputDeviceNumber = value?.DeviceNumber;
+            }
+        }
     }
 
     public string ActiveModelSummary
@@ -216,7 +235,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            ApplyPreferredInputDeviceSetting();
             await _audioRecorderService.StartRecordingAsync(Settings.Audio).ConfigureAwait(true);
             SetStatus(AppStatus.Recording, "Recording");
             await LogAsync("Recording started.").ConfigureAwait(true);
@@ -247,7 +265,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
-            ApplyPreferredInputDeviceSetting();
             await _settingsStore.SaveAsync(Settings).ConfigureAwait(true);
             HotkeysChanged?.Invoke(this, EventArgs.Empty);
             OnPropertyChanged(nameof(ActiveModelSummary));
@@ -291,6 +308,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (string.IsNullOrWhiteSpace(audioPath))
         {
             SetStatus(AppStatus.Idle, "Idle");
+            LastError = "No microphone audio data was captured. Check the selected input device and Windows microphone access.";
             await LogAsync("Recording stopped without usable audio data.").ConfigureAwait(true);
             return;
         }
@@ -482,16 +500,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RaiseCommandStates();
     }
 
-    private void ApplyPreferredInputDeviceSetting()
+    private void RefreshInputDevices()
     {
-        if (int.TryParse(PreferredInputDeviceNumberText, out var value) && value >= 0)
+        var devices = _audioInputDeviceService.GetAvailableDevices().ToList();
+        var options = new List<AudioInputDeviceOption>
         {
-            Settings.Audio.PreferredInputDeviceNumber = value;
-            return;
+            new(null, devices.Count > 0
+                ? $"Automatic (fallback to device 0: {devices[0].DisplayName})"
+                : "Automatic (fallback to device 0)")
+        };
+
+        options.AddRange(devices);
+
+        if (Settings.Audio.PreferredInputDeviceNumber is { } preferredDeviceNumber &&
+            options.All(option => option.DeviceNumber != preferredDeviceNumber))
+        {
+            options.Add(new AudioInputDeviceOption(
+                preferredDeviceNumber,
+                $"{preferredDeviceNumber}: Saved device currently unavailable"));
         }
 
-        Settings.Audio.PreferredInputDeviceNumber = null;
-        PreferredInputDeviceNumberText = string.Empty;
+        InputDevices = options;
+        SelectedInputDevice = options.FirstOrDefault(option => option.DeviceNumber == Settings.Audio.PreferredInputDeviceNumber)
+            ?? options[0];
     }
 
     private async Task HandleExceptionAsync(Exception exception)

@@ -49,6 +49,7 @@ public partial class App : Avalonia.Application
             var modelManager = new WhisperModelService(paths);
             var transcriptionService = new WhisperTranscriptionService(logger);
             var recorderService = new NAudioRecorderService(paths);
+            var audioInputDeviceService = new AudioInputDeviceService();
             var pasteService = new ClipboardPasteService();
             var filePickerService = new AvaloniaFilePickerService();
             var audioPreviewService = new MediaPlayerAudioPreviewService();
@@ -61,6 +62,7 @@ public partial class App : Avalonia.Application
                 modelManager,
                 transcriptionService,
                 recorderService,
+                audioInputDeviceService,
                 pasteService,
                 filePickerService,
                 audioPreviewService);

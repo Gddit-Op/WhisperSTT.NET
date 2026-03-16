@@ -288,8 +288,22 @@
                   <TextBlock FontSize="18"
                              FontWeight="SemiBold"
                              Text="Audio + Paste" />
-                  <TextBlock Margin="0,16,0,4" Text="Preferred Input Device Number" />
-                  <TextBox Text="{Binding PreferredInputDeviceNumberText}" />
+                  <TextBlock Margin="0,16,0,4" Text="Recording Input Device" />
+                  <Grid ColumnDefinitions="*,Auto">
+                    <ComboBox ItemsSource="{Binding InputDevices}"
+                              SelectedItem="{Binding SelectedInputDevice}">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding DisplayName}" />
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="1"
+                            Margin="12,0,0,0"
+                            Padding="12,6"
+                            Command="{Binding RefreshInputDevicesCommand}"
+                            Content="Refresh" />
+                  </Grid>
                   <CheckBox Margin="0,16,0,0"
                             Content="Enable feedback sounds"
                             IsChecked="{Binding Settings.Audio.EnableFeedbackSounds}" />

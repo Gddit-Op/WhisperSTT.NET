@@ -19,6 +19,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="NLayer.NAudioSupport" Version="1.4.0" />
+    <PackageReference Include="SoundFlow" Version="1.4.0" />
     <PackageReference Include="Whisper.net" Version="1.9.1-preview1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1-preview1" />
     <PackageReference Include="Whisper.net.Runtime.Cuda" Version="1.9.1-preview1" />

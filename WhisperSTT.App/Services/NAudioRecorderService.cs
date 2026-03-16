@@ -1,22 +1,30 @@
 using System.IO;
-using NAudio.Wave;
+using SoundFlow.Abstracts;
+using SoundFlow.Abstracts.Devices;
+using SoundFlow.Backends.MiniAudio;
+using SoundFlow.Backends.MiniAudio.Enums;
+using SoundFlow.Components;
+using SoundFlow.Enums;
+using SoundFlow.Structs;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
 
 namespace WhisperSTT.App.Services;
 
-public sealed class NAudioRecorderService : IAudioRecorderService
+public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
 {
+    private const int SoundFlowBufferSize = 8192;
     private const int WaveHeaderSizeBytes = 44;
     private readonly ApplicationPaths _paths;
     private readonly IActivityLogService? _activityLogService;
     private readonly object _syncRoot = new();
-    private WaveInEvent? _waveIn;
-    private WaveFileWriter? _writer;
+    private readonly AudioEngine _audioEngine;
+    private AudioCaptureDevice? _captureDevice;
+    private Recorder? _recorder;
     private TaskCompletionSource<string>? _recordingStoppedSource;
     private string? _currentFilePath;
     private bool _discardOnStop;
-    private long _recordedByteCount;
+    private long _recordedSampleCount;
     private Exception? _lastRecordingException;
     private bool _lastRecordingEndedWithoutData;
     private bool _firstDataAvailableLogged;
@@ -28,6 +36,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService
         _paths = paths;
         _activityLogService = activityLogService;
         _paths.EnsureCreated();
+        _audioEngine = new MiniAudioEngine(Array.Empty<MiniAudioBackend>());
     }
 
     public bool IsRecording
@@ -36,7 +45,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService
         {
             lock (_syncRoot)
             {
-                return _waveIn is not null;
+                return _captureDevice is not null;
             }
         }
     }
@@ -50,7 +59,8 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             return Task.CompletedTask;
         }
 
-        if (WaveInEvent.DeviceCount <= 0)
+        var captureDevices = _audioEngine.CaptureDevices;
+        if (captureDevices.Length == 0)
         {
             throw new InvalidOperationException("No microphone input device is available.");
         }
@@ -60,45 +70,55 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             $"recording-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.wav");
 
         var recordingStoppedSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var deviceNumber = ResolveDeviceNumber(settings.PreferredInputDeviceNumber);
-        var deviceName = GetDeviceName(deviceNumber);
-        var waveIn = new WaveInEvent
+        var deviceNumber = ResolveDeviceNumber(settings.PreferredInputDeviceNumber, captureDevices.Length);
+        var deviceInfo = captureDevices[deviceNumber];
+        var audioFormat = new AudioFormat
         {
-            DeviceNumber = deviceNumber,
-            BufferMilliseconds = 200,
-            WaveFormat = new WaveFormat(16000, 16, 1)
+            Format = SampleFormat.F32,
+            Channels = 1,
+            Layout = AudioFormat.GetLayoutFromChannels(1),
+            SampleRate = 16000
         };
 
-        var writer = new WaveFileWriter(currentFilePath, waveIn.WaveFormat);
-        waveIn.DataAvailable += OnDataAvailable;
-        waveIn.RecordingStopped += OnRecordingStopped;
+        var captureDevice = _audioEngine.InitializeCaptureDevice(deviceInfo, audioFormat, null);
+        var recorder = new Recorder(captureDevice, currentFilePath, "wav")
+        {
+            ProcessCallback = OnRecorderAudioProcessed
+        };
 
         lock (_syncRoot)
         {
             _currentFilePath = currentFilePath;
             _recordingStoppedSource = recordingStoppedSource;
             _discardOnStop = false;
-            _recordedByteCount = 0;
+            _recordedSampleCount = 0;
             _lastRecordingException = null;
             _lastRecordingEndedWithoutData = false;
             _firstDataAvailableLogged = false;
             _currentDeviceNumber = deviceNumber;
-            _currentDeviceName = deviceName;
-            _waveIn = waveIn;
-            _writer = writer;
+            _currentDeviceName = string.IsNullOrWhiteSpace(deviceInfo.Name) ? $"Input device {deviceNumber}" : deviceInfo.Name;
+            _captureDevice = captureDevice;
+            _recorder = recorder;
         }
 
         TryWriteDiagnosticLine(
-            $"Recorder diagnostics: starting WaveInEvent on device {_currentDeviceNumber} ({_currentDeviceName}); bufferMs={waveIn.BufferMilliseconds}; format={waveIn.WaveFormat.SampleRate}Hz/{waveIn.WaveFormat.BitsPerSample}bit/{waveIn.WaveFormat.Channels}ch; output={currentFilePath}");
+            $"Recorder diagnostics: starting SoundFlow capture on device {_currentDeviceNumber} ({_currentDeviceName}); format={audioFormat.SampleRate}Hz/{audioFormat.Format}/{audioFormat.Channels}ch; output={currentFilePath}");
 
         try
         {
-            waveIn.StartRecording();
-            TryWriteDiagnosticLine("Recorder diagnostics: WaveInEvent.StartRecording succeeded.");
+            var startResult = recorder.StartRecording(null);
+            if (startResult.IsFailure)
+            {
+                throw new InvalidOperationException(startResult.Error?.ToString() ?? "Failed to start SoundFlow recorder.");
+            }
+
+            captureDevice.Start();
+            TryWriteDiagnosticLine("Recorder diagnostics: SoundFlow capture started successfully.");
         }
         catch (Exception exception)
         {
-            TryWriteDiagnosticLine($"Recorder diagnostics: WaveInEvent.StartRecording failed: {exception.GetType().Name}: {exception.Message}");
+            TryWriteDiagnosticLine($"Recorder diagnostics: SoundFlow start failed: {exception.GetType().Name}: {exception.Message}");
+            CleanupActiveRecordingState(disposeTask: true);
             throw;
         }
 
@@ -107,8 +127,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService
 
     public async Task<string> StopRecordingAsync(CancellationToken cancellationToken = default)
     {
-        Task<string> completionTask;
-        WaveInEvent? waveIn;
+        Task<string>? completionTask;
 
         lock (_syncRoot)
         {
@@ -132,17 +151,15 @@ public sealed class NAudioRecorderService : IAudioRecorderService
 
             _discardOnStop = false;
             completionTask = _recordingStoppedSource.Task;
-            waveIn = _waveIn;
         }
 
-        waveIn?.StopRecording();
+        await FinalizeRecordingAsync(cancellationToken).ConfigureAwait(false);
         return await completionTask.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task CancelRecordingAsync(CancellationToken cancellationToken = default)
     {
         Task<string>? completionTask;
-        WaveInEvent? waveIn;
 
         lock (_syncRoot)
         {
@@ -153,90 +170,87 @@ public sealed class NAudioRecorderService : IAudioRecorderService
 
             _discardOnStop = true;
             completionTask = _recordingStoppedSource.Task;
-            waveIn = _waveIn;
         }
 
-        waveIn?.StopRecording();
+        await FinalizeRecordingAsync(cancellationToken).ConfigureAwait(false);
         _ = await completionTask.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private void OnDataAvailable(object? sender, WaveInEventArgs e)
+    public void Dispose()
     {
-        if (e.BytesRecorded <= 0)
-        {
-            return;
-        }
-
-        _writer?.Write(e.Buffer, 0, e.BytesRecorded);
-        _writer?.Flush();
-        var totalBytes = Interlocked.Add(ref _recordedByteCount, e.BytesRecorded);
-
-        if (_firstDataAvailableLogged)
-        {
-            return;
-        }
-
-        lock (_syncRoot)
-        {
-            if (_firstDataAvailableLogged)
-            {
-                return;
-            }
-
-            _firstDataAvailableLogged = true;
-        }
-
-        TryWriteDiagnosticLine(
-            $"Recorder diagnostics: first DataAvailable bytes={e.BytesRecorded}; totalBytes={totalBytes}; device={_currentDeviceNumber} ({_currentDeviceName}).");
+        CleanupActiveRecordingState(disposeTask: true);
+        _audioEngine.Dispose();
     }
 
-    private void OnRecordingStopped(object? sender, StoppedEventArgs e)
+    private async Task FinalizeRecordingAsync(CancellationToken cancellationToken)
     {
-        WaveInEvent? waveIn;
-        WaveFileWriter? writer;
+        AudioCaptureDevice? captureDevice;
+        Recorder? recorder;
         TaskCompletionSource<string>? recordingStoppedSource;
         string currentFilePath;
         bool discardOnStop;
-        long recordedByteCount;
+        long recordedSampleCount;
+        Exception? recordingException;
 
         lock (_syncRoot)
         {
-            waveIn = _waveIn;
-            _waveIn = null;
-            writer = _writer;
-            _writer = null;
+            captureDevice = _captureDevice;
+            _captureDevice = null;
+            recorder = _recorder;
+            _recorder = null;
             recordingStoppedSource = _recordingStoppedSource;
             _recordingStoppedSource = null;
             currentFilePath = _currentFilePath ?? string.Empty;
             _currentFilePath = null;
             discardOnStop = _discardOnStop;
-            recordedByteCount = _recordedByteCount;
-            _recordedByteCount = 0;
+            recordedSampleCount = _recordedSampleCount;
+            _recordedSampleCount = 0;
+            recordingException = _lastRecordingException;
             _lastRecordingException = null;
             _lastRecordingEndedWithoutData = false;
             _firstDataAvailableLogged = false;
         }
 
-        if (waveIn is not null)
+        try
         {
-            waveIn.DataAvailable -= OnDataAvailable;
-            waveIn.RecordingStopped -= OnRecordingStopped;
-            waveIn.Dispose();
+            if (recorder is not null)
+            {
+                var stopResult = await recorder.StopRecordingAsync().ConfigureAwait(false);
+                if (stopResult.IsFailure)
+                {
+                    recordingException ??= new InvalidOperationException(stopResult.Error?.ToString() ?? "Failed to stop SoundFlow recorder.");
+                }
+            }
+
+            captureDevice?.Stop();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            recordingException ??= exception;
+        }
+        finally
+        {
+            recorder?.Dispose();
+            captureDevice?.Dispose();
         }
 
-        writer?.Dispose();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var recordedFileLength = !string.IsNullOrWhiteSpace(currentFilePath) && File.Exists(currentFilePath)
+            ? new FileInfo(currentFilePath).Length
+            : 0L;
 
         TryWriteDiagnosticLine(
-            $"Recorder diagnostics: RecordingStopped exception={(e.Exception is null ? "null" : $"{e.Exception.GetType().Name}: {e.Exception.Message}")}; recordedBytes={recordedByteCount}; discardOnStop={discardOnStop}; file={currentFilePath}; fileExists={File.Exists(currentFilePath)}.");
+            $"Recorder diagnostics: SoundFlow stop exception={(recordingException is null ? "null" : $"{recordingException.GetType().Name}: {recordingException.Message}")}; recordedSamples={recordedSampleCount}; fileBytes={recordedFileLength}; discardOnStop={discardOnStop}; file={currentFilePath}; fileExists={File.Exists(currentFilePath)}.");
 
-        if (e.Exception is not null && !IsBenignStopException(e.Exception))
+        if (recordingException is not null)
         {
             lock (_syncRoot)
             {
-                _lastRecordingException = e.Exception;
+                _lastRecordingException = recordingException;
             }
 
-            recordingStoppedSource?.TrySetException(e.Exception);
+            recordingStoppedSource?.TrySetException(recordingException);
             return;
         }
 
@@ -251,7 +265,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             return;
         }
 
-        if (!HasUsableAudioData(currentFilePath, recordedByteCount))
+        if (!HasUsableAudioData(currentFilePath, recordedSampleCount, recordedFileLength))
         {
             if (!string.IsNullOrWhiteSpace(currentFilePath) && File.Exists(currentFilePath))
             {
@@ -270,9 +284,74 @@ public sealed class NAudioRecorderService : IAudioRecorderService
         recordingStoppedSource?.TrySetResult(currentFilePath);
     }
 
-    private static bool HasUsableAudioData(string filePath, long recordedByteCount)
+    private void OnRecorderAudioProcessed(Span<float> samples, Capability capability)
     {
-        if (recordedByteCount > 0)
+        if (capability is not Capability.Record and not Capability.Mixed)
+        {
+            return;
+        }
+
+        var totalSamples = Interlocked.Add(ref _recordedSampleCount, samples.Length);
+
+        if (_firstDataAvailableLogged)
+        {
+            return;
+        }
+
+        lock (_syncRoot)
+        {
+            if (_firstDataAvailableLogged)
+            {
+                return;
+            }
+
+            _firstDataAvailableLogged = true;
+        }
+
+        var averageAmplitude = ComputeAverageAmplitude(samples);
+        TryWriteDiagnosticLine(
+            $"Recorder diagnostics: first SoundFlow samples={samples.Length}; totalSamples={totalSamples}; avgAmplitude={averageAmplitude:F6}; device={_currentDeviceNumber} ({_currentDeviceName}).");
+    }
+
+    private void CleanupActiveRecordingState(bool disposeTask)
+    {
+        AudioCaptureDevice? captureDevice;
+        Recorder? recorder;
+
+        lock (_syncRoot)
+        {
+            captureDevice = _captureDevice;
+            _captureDevice = null;
+            recorder = _recorder;
+            _recorder = null;
+            _recordingStoppedSource = null;
+            _currentFilePath = null;
+            _discardOnStop = false;
+            _recordedSampleCount = 0;
+            _lastRecordingException = null;
+            _lastRecordingEndedWithoutData = false;
+            _firstDataAvailableLogged = false;
+        }
+
+        if (disposeTask)
+        {
+            try
+            {
+                recorder?.StopRecording();
+            }
+            catch
+            {
+                // Cleanup path.
+            }
+        }
+
+        recorder?.Dispose();
+        captureDevice?.Dispose();
+    }
+
+    private static bool HasUsableAudioData(string filePath, long recordedSampleCount, long fileLength)
+    {
+        if (recordedSampleCount > 0 && fileLength > WaveHeaderSizeBytes)
         {
             return true;
         }
@@ -282,25 +361,13 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             return false;
         }
 
-        var fileLength = new FileInfo(filePath).Length;
-        return fileLength > WaveHeaderSizeBytes;
+        return new FileInfo(filePath).Length > WaveHeaderSizeBytes;
     }
 
-    private static bool IsBenignStopException(Exception exception)
-    {
-        if (exception is not NAudio.MmException mmException)
-        {
-            return false;
-        }
-
-        return mmException.Message.Contains("WaveHeaderUnprepared", StringComparison.OrdinalIgnoreCase) &&
-               mmException.Message.Contains("waveInAddBuffer", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int ResolveDeviceNumber(int? preferredDeviceNumber)
+    private static int ResolveDeviceNumber(int? preferredDeviceNumber, int deviceCount)
     {
         if (preferredDeviceNumber is >= 0 &&
-            preferredDeviceNumber.Value < WaveInEvent.DeviceCount)
+            preferredDeviceNumber.Value < deviceCount)
         {
             return preferredDeviceNumber.Value;
         }
@@ -308,19 +375,20 @@ public sealed class NAudioRecorderService : IAudioRecorderService
         return 0;
     }
 
-    private static string GetDeviceName(int deviceNumber)
+    private static float ComputeAverageAmplitude(ReadOnlySpan<float> samples)
     {
-        try
+        if (samples.Length <= 0)
         {
-            var capabilities = WaveInEvent.GetCapabilities(deviceNumber);
-            return string.IsNullOrWhiteSpace(capabilities.ProductName)
-                ? $"Input device {deviceNumber}"
-                : capabilities.ProductName.Trim();
+            return 0f;
         }
-        catch
+
+        var amplitudeSum = 0f;
+        for (var sampleIndex = 0; sampleIndex < samples.Length; sampleIndex++)
         {
-            return $"Input device {deviceNumber}";
+            amplitudeSum += MathF.Abs(samples[sampleIndex]);
         }
+
+        return amplitudeSum / samples.Length;
     }
 
     private void TryWriteDiagnosticLine(string message)

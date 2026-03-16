@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -10,7 +11,9 @@ namespace WhisperSTT.App.Services;
 public sealed class ClipboardPasteService : IPasteService
 {
     private const int ClipboardRetryCount = 8;
+    private const int PasteRetryCount = 3;
     private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(75);
+    private static readonly TimeSpan PasteRetryDelay = TimeSpan.FromMilliseconds(50);
 
     public async Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default)
     {
@@ -45,7 +48,7 @@ public sealed class ClipboardPasteService : IPasteService
                 cancellationToken,
                 throwOnFailure: true).ConfigureAwait(true);
 
-            SendPasteShortcut();
+            SendPasteShortcutWithFallback();
             await Task.Delay(100, cancellationToken).ConfigureAwait(true);
 
             if (!restoreClipboard)
@@ -150,7 +153,30 @@ public sealed class ClipboardPasteService : IPasteService
         return exception is COMException or ExternalException or InvalidOperationException;
     }
 
-    private static void SendPasteShortcut()
+    private static void SendPasteShortcutWithFallback()
+    {
+        Exception? lastException = null;
+        for (var attempt = 1; attempt <= PasteRetryCount; attempt++)
+        {
+            try
+            {
+                if (TrySendPasteShortcut() || TrySendPasteMessage())
+                {
+                    return;
+                }
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+            }
+
+            Thread.Sleep(PasteRetryDelay);
+        }
+
+        throw new InvalidOperationException(CreatePasteFailureMessage(), lastException);
+    }
+
+    private static bool TrySendPasteShortcut()
     {
         var inputs = new[]
         {
@@ -161,10 +187,164 @@ public sealed class ClipboardPasteService : IPasteService
         };
 
         var sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
-        if (sent != inputs.Length)
+        if (sent == inputs.Length)
         {
-            throw new InvalidOperationException("Sending Ctrl+V with SendInput failed.");
+            return true;
         }
+
+        var errorCode = Marshal.GetLastWin32Error();
+        if (errorCode == 0)
+        {
+            return false;
+        }
+
+        throw new InvalidOperationException(
+            $"Sending Ctrl+V with SendInput failed ({errorCode}: {new Win32Exception(errorCode).Message}).");
+    }
+
+    private static bool TrySendPasteMessage()
+    {
+        var foregroundWindow = NativeMethods.GetForegroundWindow();
+        if (foregroundWindow == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        foreach (var targetWindow in EnumeratePasteTargets(foregroundWindow))
+        {
+            var sendResult = NativeMethods.SendMessageTimeout(
+                targetWindow,
+                NativeMethods.WmPaste,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                NativeMethods.SmtoAbortIfHung,
+                500,
+                out _);
+
+            if (sendResult != IntPtr.Zero)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string CreatePasteFailureMessage()
+    {
+        var foregroundWindow = NativeMethods.GetForegroundWindow();
+        if (foregroundWindow == IntPtr.Zero)
+        {
+            return "Automatic paste failed. The transcript remains on the clipboard because no active target window was detected. Use the Copy button or paste manually.";
+        }
+
+        if (TryIsWindowElevated(foregroundWindow, out var isElevated) && isElevated)
+        {
+            return "Automatic paste failed. The transcript remains on the clipboard because the focused target window is running as administrator. Start WhisperSTT as administrator to paste there automatically, or paste manually.";
+        }
+
+        return "Automatic paste failed. The transcript remains on the clipboard. Use the Copy button or paste manually.";
+    }
+
+    private static bool TryIsWindowElevated(IntPtr windowHandle, out bool isElevated)
+    {
+        isElevated = false;
+        _ = NativeMethods.GetWindowThreadProcessId(windowHandle, out var processId);
+        if (processId == 0)
+        {
+            return false;
+        }
+
+        var processHandle = NativeMethods.OpenProcess(
+            NativeMethods.ProcessQueryLimitedInformation,
+            bInheritHandle: false,
+            processId);
+        if (processHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!NativeMethods.OpenProcessToken(processHandle, NativeMethods.TokenQuery, out var tokenHandle))
+            {
+                return false;
+            }
+
+            try
+            {
+                var size = Marshal.SizeOf<NativeMethods.TOKEN_ELEVATION>();
+                var buffer = Marshal.AllocHGlobal(size);
+                try
+                {
+                    if (!NativeMethods.GetTokenInformation(
+                            tokenHandle,
+                            NativeMethods.TokenElevation,
+                            buffer,
+                            size,
+                            out _))
+                    {
+                        return false;
+                    }
+
+                    var elevation = Marshal.PtrToStructure<NativeMethods.TOKEN_ELEVATION>(buffer);
+                    isElevated = elevation.TokenIsElevated != 0;
+                    return true;
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+            finally
+            {
+                _ = NativeMethods.CloseHandle(tokenHandle);
+            }
+        }
+        finally
+        {
+            _ = NativeMethods.CloseHandle(processHandle);
+        }
+    }
+
+    private static IEnumerable<IntPtr> EnumeratePasteTargets(IntPtr foregroundWindow)
+    {
+        var seen = new HashSet<IntPtr>();
+
+        if (TryGetFocusedWindow(foregroundWindow, out var focusedWindow) &&
+            focusedWindow != IntPtr.Zero &&
+            seen.Add(focusedWindow))
+        {
+            yield return focusedWindow;
+        }
+
+        if (seen.Add(foregroundWindow))
+        {
+            yield return foregroundWindow;
+        }
+    }
+
+    private static bool TryGetFocusedWindow(IntPtr foregroundWindow, out IntPtr focusedWindow)
+    {
+        focusedWindow = IntPtr.Zero;
+        var foregroundThreadId = NativeMethods.GetWindowThreadProcessId(foregroundWindow, out _);
+        if (foregroundThreadId == 0)
+        {
+            return false;
+        }
+
+        var guiThreadInfo = new NativeMethods.GUITHREADINFO
+        {
+            cbSize = (uint)Marshal.SizeOf<NativeMethods.GUITHREADINFO>()
+        };
+
+        if (!NativeMethods.GetGUIThreadInfo(foregroundThreadId, ref guiThreadInfo))
+        {
+            return false;
+        }
+
+        focusedWindow = guiThreadInfo.hwndFocus;
+        return focusedWindow != IntPtr.Zero;
     }
 
     private static NativeMethods.INPUT CreateKeyInput(ushort virtualKey, bool keyUp)

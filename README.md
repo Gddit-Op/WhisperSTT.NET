@@ -134,19 +134,31 @@ dotnet publish .\WhisperSTT.App\WhisperSTT.App.csproj -c Release -r win-x64 --se
 
 Publish note:
 
-- NativeAOT and trimming are intentionally disabled for the desktop app because `NAudio` playback/recording and `Whisper.net` native runtime loading are not reliable under the current AOT/single-file setup.
+- Regular project builds stay non-AOT for faster iteration.
+- The `FolderProfile` publish profile is configured for NativeAOT on `win-x64`.
+- NativeAOT publish expects the MSVC linker and Windows SDK libraries to be available in the environment. Publishing from Visual Studio usually provides this automatically; plain terminal publishing may require a Developer Command Prompt or equivalent toolchain environment.
+- Single-file publish remains disabled because `Whisper.net` native runtimes are loaded from the published `runtimes` folder.
+
+Helper script:
+
+```powershell .\scripts\Publish-NativeAot.ps1
+```
 
 ## First Start
 
 1. Start the app.
-2. The main window is created and then hidden to the system tray.
-3. Open the app from the tray icon.
-4. Go to `Settings`.
-5. Choose a recording model preset.
-6. Click `Download Selected Model` or point `Custom Model Path` to a local Whisper model file.
-7. Save settings.
-8. Use the configured hotkey to start and stop recording.
-9. If automatic paste does not work in a target app, use the `Copy` button in `Latest Transcript`.
+2. The main window opens on screen.
+3. Go to `Settings`.
+4. Choose a recording model preset.
+5. Click `Download Selected Model` or point `Custom Model Path` to a local Whisper model file.
+6. Save settings.
+7. Use the configured hotkey to start and stop recording.
+8. If automatic paste does not work in a target app, use the `Copy` button in `Latest Transcript`.
+
+Paste note:
+
+- Windows blocks a normal app from sending automatic paste into elevated `Run as administrator` windows.
+- In that case, run WhisperSTT as administrator too, or paste manually from the clipboard.
 
 Default hotkeys:
 

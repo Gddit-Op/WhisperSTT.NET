@@ -1,13 +1,12 @@
-using NAudio.CoreAudioApi;
-using NAudio.Wave;
+using System.Runtime.InteropServices;
+using System.Text;
 using WhisperSTT.Core.Services;
 
 namespace WhisperSTT.App.Services;
 
 public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
 {
-    private IWavePlayer? _waveOut;
-    private AudioFileReader? _audioFileReader;
+    private const string Alias = "whisper_preview";
     private string? _loadedFilePath;
 
     public bool IsLoaded => !string.IsNullOrWhiteSpace(_loadedFilePath);
@@ -16,93 +15,90 @@ public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
 
     public void Load(string filePath)
     {
-        if (string.Equals(_loadedFilePath, filePath, StringComparison.OrdinalIgnoreCase) && _waveOut is not null)
+        if (string.Equals(_loadedFilePath, filePath, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        DisposePlayback();
-
-        var reader = new AudioFileReader(filePath);
-        try
-        {
-            var player = CreatePlayer(reader);
-            _audioFileReader = reader;
-            _waveOut = player;
-            _loadedFilePath = filePath;
-        }
-        catch
-        {
-            reader.Dispose();
-            _loadedFilePath = null;
-            throw;
-        }
+        Unload();
+        ExecuteMciCommand($"open \"{filePath}\" alias {Alias}");
+        _loadedFilePath = filePath;
     }
 
     public void Play()
     {
-        _waveOut?.Play();
+        EnsureLoaded();
+        ExecuteMciCommand($"play {Alias}");
     }
 
     public void Unload()
     {
-        DisposePlayback();
+        if (!IsLoaded)
+        {
+            return;
+        }
+
+        try
+        {
+            ExecuteMciCommand($"close {Alias}");
+        }
+        catch
+        {
+            // Ignore cleanup failures while resetting preview state.
+        }
+        finally
+        {
+            _loadedFilePath = null;
+        }
     }
 
     public void Pause()
     {
-        _waveOut?.Pause();
+        EnsureLoaded();
+        ExecuteMciCommand($"pause {Alias}");
     }
 
     public void Stop()
     {
-        _waveOut?.Stop();
-        if (_audioFileReader is not null)
-        {
-            _audioFileReader.Position = 0;
-        }
+        EnsureLoaded();
+        ExecuteMciCommand($"stop {Alias}");
+        ExecuteMciCommand($"seek {Alias} to start");
     }
 
     public void Dispose()
     {
-        DisposePlayback();
+        Unload();
     }
 
-    private void DisposePlayback()
+    private static void ExecuteMciCommand(string command)
     {
-        _waveOut?.Stop();
-        _waveOut?.Dispose();
-        _waveOut = null;
-
-        _audioFileReader?.Dispose();
-        _audioFileReader = null;
-        _loadedFilePath = null;
-    }
-
-    private static IWavePlayer CreatePlayer(IWaveProvider waveProvider)
-    {
-        try
+        var errorCode = mciSendString(command, null, 0, IntPtr.Zero);
+        if (errorCode == 0)
         {
-            var waveOut = new WaveOutEvent();
-            waveOut.Init(waveProvider);
-            return waveOut;
+            return;
         }
-        catch (Exception)
+
+        var errorBuilder = new StringBuilder(256);
+        var errorResolved = mciGetErrorString(errorCode, errorBuilder, errorBuilder.Capacity);
+        var errorText = errorResolved
+            ? errorBuilder.ToString()
+            : $"MCI error code {errorCode}.";
+
+        throw new InvalidOperationException($"Audio preview command failed: {errorText}");
+    }
+
+    private void EnsureLoaded()
+    {
+        if (!IsLoaded)
         {
-            try
-            {
-                using var enumerator = new MMDeviceEnumerator();
-                using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-                var wasapiOut = new WasapiOut(device, AudioClientShareMode.Shared, false, 200);
-                wasapiOut.Init(waveProvider);
-                return wasapiOut;
-            }
-            catch (Exception exception)
-            {
-                throw new InvalidOperationException(
-                    "Audio preview could not be initialized. File selection and transcription still work, but playback preview is unavailable on this system.",
-                    exception);
-            }
+            throw new InvalidOperationException("No audio file is loaded for preview.");
         }
     }
+
+    [DllImport("winmm.dll", CharSet = CharSet.Unicode)]
+    private static extern int mciSendString(string command, StringBuilder? returnValue, int returnLength, IntPtr callback);
+
+    [DllImport("winmm.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool mciGetErrorString(int errorCode, StringBuilder errorText, int errorTextSize);
 }

@@ -55,7 +55,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _preferredInputDeviceNumberText = settings.Audio.PreferredInputDeviceNumber?.ToString() ?? string.Empty;
 
         ToggleRecordingCommand = new AsyncRelayCommand(ToggleRecordingAsync, () => Status != AppStatus.Transcribing);
-        CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording);
+        CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording || _audioRecorderService.IsRecording);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync);
         BrowseFileCommand = new AsyncRelayCommand(BrowseFileAsync);
         TranscribeFileCommand = new AsyncRelayCommand(TranscribeSelectedFileAsync, CanTranscribeFile);
@@ -127,7 +127,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _ => AvaloniaBrushes.Gray
     };
 
-    public string RecordingButtonText => Status == AppStatus.Recording ? "Stop Recording" : "Start Recording";
+    public string RecordingButtonText => Status == AppStatus.Recording || _audioRecorderService.IsRecording ? "Stop Recording" : "Start Recording";
 
     public string CurrentTranscript
     {
@@ -210,7 +210,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
-            if (Status == AppStatus.Recording)
+            if (Status == AppStatus.Recording || _audioRecorderService.IsRecording)
             {
                 await StopRecordingAndTranscribeAsync().ConfigureAwait(true);
                 return;
@@ -291,6 +291,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (string.IsNullOrWhiteSpace(audioPath))
         {
             SetStatus(AppStatus.Idle, "Idle");
+            await LogAsync("Recording stopped without usable audio data.").ConfigureAwait(true);
             return;
         }
 
@@ -304,9 +305,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateDetectedLanguage(result.DetectedLanguage);
         if (!string.IsNullOrWhiteSpace(result.Text))
         {
-            await _pasteService.PasteTextAsync(
-                result.Text,
-                Settings.Paste.RestoreClipboardAfterPaste).ConfigureAwait(true);
+            await TryPasteTranscriptAsync(result.Text).ConfigureAwait(true);
 
             if (Settings.Logging.WriteTranscriptHistory)
             {
@@ -497,7 +496,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task HandleExceptionAsync(Exception exception)
     {
         LastError = exception.Message;
-        SetStatus(AppStatus.Error, "Error");
+        if (exception is InvalidOperationException &&
+            exception.Message.Contains("Recording is not active.", StringComparison.Ordinal))
+        {
+            SetStatus(AppStatus.Idle, "Idle");
+        }
+        else
+        {
+            SetStatus(AppStatus.Error, "Error");
+        }
+
         await LogAsync($"Error: {exception}").ConfigureAwait(true);
     }
 
@@ -516,6 +524,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         await _activityLogService.WriteAsync(message).ConfigureAwait(true);
+    }
+
+    private async Task TryPasteTranscriptAsync(string text)
+    {
+        try
+        {
+            await _pasteService.PasteTextAsync(
+                text,
+                Settings.Paste.RestoreClipboardAfterPaste).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            LastError = exception.Message;
+            await LogAsync($"Automatic paste failed: {exception.Message}").ConfigureAwait(true);
+        }
     }
 
     private void SetStatus(AppStatus status, string text)

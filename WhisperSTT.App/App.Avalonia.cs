@@ -70,10 +70,8 @@ public partial class App : Avalonia.Application
             _window = new MainWindow(_viewModel);
             _window.Closing += OnMainWindowClosing;
             desktopLifetime.MainWindow = _window;
-            _window.Show();
-            _window.HideToTray();
-
             CreateTrayIcon();
+            _window.ShowFromTray();
         }
         catch (Exception exception)
         {

@@ -8,6 +8,7 @@ namespace WhisperSTT.App.Services;
 public sealed class NAudioRecorderService : IAudioRecorderService
 {
     private readonly ApplicationPaths _paths;
+    private readonly object _syncRoot = new();
     private WaveInEvent? _waveIn;
     private WaveFileWriter? _writer;
     private TaskCompletionSource<string>? _recordingStoppedSource;
@@ -20,7 +21,16 @@ public sealed class NAudioRecorderService : IAudioRecorderService
         _paths.EnsureCreated();
     }
 
-    public bool IsRecording => _waveIn is not null;
+    public bool IsRecording
+    {
+        get
+        {
+            lock (_syncRoot)
+            {
+                return _waveIn is not null;
+            }
+        }
+    }
 
     public Task StartRecordingAsync(AudioSettings settings, CancellationToken cancellationToken = default)
     {
@@ -36,50 +46,76 @@ public sealed class NAudioRecorderService : IAudioRecorderService
             return Task.CompletedTask;
         }
 
-        _currentFilePath = Path.Combine(
+        var currentFilePath = Path.Combine(
             _paths.TempDirectory,
             $"recording-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.wav");
 
-        _recordingStoppedSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _discardOnStop = false;
-
-        _waveIn = new WaveInEvent
+        var recordingStoppedSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var waveIn = new WaveInEvent
         {
             DeviceNumber = ResolveDeviceNumber(settings.PreferredInputDeviceNumber),
             BufferMilliseconds = 200,
             WaveFormat = new WaveFormat(16000, 16, 1)
         };
 
-        _writer = new WaveFileWriter(_currentFilePath, _waveIn.WaveFormat);
-        _waveIn.DataAvailable += OnDataAvailable;
-        _waveIn.RecordingStopped += OnRecordingStopped;
-        _waveIn.StartRecording();
+        var writer = new WaveFileWriter(currentFilePath, waveIn.WaveFormat);
+        waveIn.DataAvailable += OnDataAvailable;
+        waveIn.RecordingStopped += OnRecordingStopped;
+
+        lock (_syncRoot)
+        {
+            _currentFilePath = currentFilePath;
+            _recordingStoppedSource = recordingStoppedSource;
+            _discardOnStop = false;
+            _waveIn = waveIn;
+            _writer = writer;
+        }
+
+        waveIn.StartRecording();
 
         return Task.CompletedTask;
     }
 
     public async Task<string> StopRecordingAsync(CancellationToken cancellationToken = default)
     {
-        if (_waveIn is null || _recordingStoppedSource is null)
+        Task<string> completionTask;
+        WaveInEvent? waveIn;
+
+        lock (_syncRoot)
         {
-            throw new InvalidOperationException("Recording is not active.");
+            if (_recordingStoppedSource is null)
+            {
+                throw new InvalidOperationException("Recording is not active.");
+            }
+
+            _discardOnStop = false;
+            completionTask = _recordingStoppedSource.Task;
+            waveIn = _waveIn;
         }
 
-        _discardOnStop = false;
-        _waveIn.StopRecording();
-        return await _recordingStoppedSource.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        waveIn?.StopRecording();
+        return await completionTask.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task CancelRecordingAsync(CancellationToken cancellationToken = default)
     {
-        if (_waveIn is null || _recordingStoppedSource is null)
+        Task<string>? completionTask;
+        WaveInEvent? waveIn;
+
+        lock (_syncRoot)
         {
-            return;
+            if (_recordingStoppedSource is null)
+            {
+                return;
+            }
+
+            _discardOnStop = true;
+            completionTask = _recordingStoppedSource.Task;
+            waveIn = _waveIn;
         }
 
-        _discardOnStop = true;
-        _waveIn.StopRecording();
-        _ = await _recordingStoppedSource.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        waveIn?.StopRecording();
+        _ = await completionTask.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
@@ -90,35 +126,62 @@ public sealed class NAudioRecorderService : IAudioRecorderService
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
-        if (_waveIn is not null)
+        WaveInEvent? waveIn;
+        WaveFileWriter? writer;
+        TaskCompletionSource<string>? recordingStoppedSource;
+        string currentFilePath;
+        bool discardOnStop;
+
+        lock (_syncRoot)
         {
-            _waveIn.DataAvailable -= OnDataAvailable;
-            _waveIn.RecordingStopped -= OnRecordingStopped;
-            _waveIn.Dispose();
+            waveIn = _waveIn;
             _waveIn = null;
+            writer = _writer;
+            _writer = null;
+            recordingStoppedSource = _recordingStoppedSource;
+            currentFilePath = _currentFilePath ?? string.Empty;
+            _currentFilePath = null;
+            discardOnStop = _discardOnStop;
         }
 
-        _writer?.Dispose();
-        _writer = null;
-
-        if (e.Exception is not null)
+        if (waveIn is not null)
         {
-            _recordingStoppedSource?.TrySetException(e.Exception);
+            waveIn.DataAvailable -= OnDataAvailable;
+            waveIn.RecordingStopped -= OnRecordingStopped;
+            waveIn.Dispose();
+        }
+
+        writer?.Dispose();
+
+        if (e.Exception is not null && !IsBenignStopException(e.Exception))
+        {
+            recordingStoppedSource?.TrySetException(e.Exception);
             return;
         }
 
-        if (_discardOnStop)
+        if (discardOnStop)
         {
-            if (!string.IsNullOrWhiteSpace(_currentFilePath) && File.Exists(_currentFilePath))
+            if (!string.IsNullOrWhiteSpace(currentFilePath) && File.Exists(currentFilePath))
             {
-                File.Delete(_currentFilePath);
+                File.Delete(currentFilePath);
             }
 
-            _recordingStoppedSource?.TrySetResult(string.Empty);
+            recordingStoppedSource?.TrySetResult(string.Empty);
             return;
         }
 
-        _recordingStoppedSource?.TrySetResult(_currentFilePath ?? string.Empty);
+        recordingStoppedSource?.TrySetResult(currentFilePath);
+    }
+
+    private static bool IsBenignStopException(Exception exception)
+    {
+        if (exception is not NAudio.MmException mmException)
+        {
+            return false;
+        }
+
+        return mmException.Message.Contains("WaveHeaderUnprepared", StringComparison.OrdinalIgnoreCase) &&
+               mmException.Message.Contains("waveInAddBuffer", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int ResolveDeviceNumber(int? preferredDeviceNumber)

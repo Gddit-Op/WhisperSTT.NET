@@ -10,6 +10,8 @@ internal static class NativeMethods
     public const uint WmPaste = 0x0302;
     public const uint InputKeyboard = 1;
     public const uint KeyEventFKeyUp = 0x0002;
+    public const uint MbIconInformation = 0x00000040;
+    public const uint MbOk = 0x00000000;
     public const uint ModAlt = 0x0001;
     public const uint ModControl = 0x0002;
     public const uint ModShift = 0x0004;
@@ -23,6 +25,9 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -8,7 +8,7 @@
 - `Task.md`: original product brief.
 - `WhisperSTTClassic.sln`: main solution file. Prefer this over `WhisperSTT.slnx`.
 
-Note: legacy WPF files such as `App.xaml.cs` and `MainWindow.xaml.cs` still exist in the tree but are excluded from compilation. New UI work should go into `*.axaml` and `*.Avalonia.cs`.
+Note: New UI work should go into `*.axaml` and `*.Avalonia.cs`.
 
 ## Build, Test, and Development Commands
 

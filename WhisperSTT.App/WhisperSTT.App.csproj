@@ -5,8 +5,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="App.xaml.cs" />
-    <Compile Remove="MainWindow.xaml.cs" />
     <Compile Remove="ViewModels\ObservableObject.cs" />
     <Compile Remove="ViewModels\RelayCommand.cs" />
     <Compile Remove="ViewModels\AsyncRelayCommand.cs" />

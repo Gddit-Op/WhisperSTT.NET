@@ -38,11 +38,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
 
         await using var waveStream = new MemoryStream();
         using var audioReader = OpenAudioReader(request.AudioFilePath);
-        var sampleProvider = audioReader.ToSampleProvider();
-        if (sampleProvider.WaveFormat.Channels > 1)
-        {
-            sampleProvider = new StereoToMonoSampleProvider(sampleProvider);
-        }
+        var sampleProvider = NormalizeToMono(audioReader.ToSampleProvider());
 
         if (sampleProvider.WaveFormat.SampleRate != 16000)
         {
@@ -110,6 +106,16 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                 audioFilePath,
                 new Mp3FileReaderBase.FrameDecompressorBuilder(format => new Mp3FrameDecompressor(format))),
             _ => new AudioFileReader(audioFilePath)
+        };
+    }
+
+    private static ISampleProvider NormalizeToMono(ISampleProvider sampleProvider)
+    {
+        return sampleProvider.WaveFormat.Channels switch
+        {
+            <= 1 => sampleProvider,
+            2 => new StereoToMonoSampleProvider(sampleProvider),
+            _ => new MultiChannelToMonoSampleProvider(sampleProvider)
         };
     }
 
@@ -360,5 +366,45 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
     private static string ToLanguageCode(LanguageMode languageMode)
     {
         return languageMode == LanguageMode.De ? "de" : "en";
+    }
+
+    private sealed class MultiChannelToMonoSampleProvider : ISampleProvider
+    {
+        private readonly ISampleProvider _source;
+        private readonly int _sourceChannels;
+
+        public MultiChannelToMonoSampleProvider(ISampleProvider source)
+        {
+            _source = source;
+            _sourceChannels = source.WaveFormat.Channels;
+            WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, 1);
+        }
+
+        public WaveFormat WaveFormat { get; }
+
+        public int Read(float[] buffer, int offset, int count)
+        {
+            var sourceBuffer = new float[count * _sourceChannels];
+            var samplesRead = _source.Read(sourceBuffer, 0, sourceBuffer.Length);
+            if (samplesRead <= 0)
+            {
+                return 0;
+            }
+
+            var framesRead = samplesRead / _sourceChannels;
+            for (var frameIndex = 0; frameIndex < framesRead; frameIndex++)
+            {
+                float sum = 0;
+                var sourceOffset = frameIndex * _sourceChannels;
+                for (var channelIndex = 0; channelIndex < _sourceChannels; channelIndex++)
+                {
+                    sum += sourceBuffer[sourceOffset + channelIndex];
+                }
+
+                buffer[offset + frameIndex] = sum / _sourceChannels;
+            }
+
+            return framesRead;
+        }
     }
 }

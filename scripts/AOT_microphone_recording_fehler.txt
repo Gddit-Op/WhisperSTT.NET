@@ -1,3 +1,39 @@
+Die Logs machen das Problem jetzt klar:
+
+  WaveInEvent.StartRecording() startet zwar, aber direkt danach beendet sich der Recorder wieder mit
+  MmException: WaveHeaderUnprepared calling waveInAddBuffer
+  und zwar bevor auch nur ein einziges DataAvailable kommt (recordedBytes=0).
+
+  Das bedeutet:
+
+  - Das Mikrofon selbst ist nicht das Hauptproblem.
+  - Der Absturz/Abbruch liegt im WinMM-Recording-Pfad von NAudio.WaveInEvent.
+  - In eurem NativeAOT-Build funktioniert genau dieser Aufnahmeweg auf diesem System nicht sauber.
+
+  Praktisch ist die Lage damit:
+
+  - Datei-Transkription mit Whisper/Vulkan funktioniert.
+  - Mikrofonaufnahme über WaveInEvent funktioniert im AOT-Build hier nicht.
+  - Der frühere WASAPI-Versuch ist ebenfalls als AOT-Pfad blockiert, weil NAudio-MMDeviceEnumerator in NativeAOT schon beim Start scheitert.
+
+  Kurz gesagt: Mit der aktuellen Kombination aus NAudio 2.3.0 und eurem NativeAOT-Build ist Recording der blockierte Teil, nicht Whisper.
+
+  Die sinnvollen Optionen sind jetzt:
+
+  1. Non-AOT für die Desktop-App verwenden, wenn Mikrofonaufnahme wichtig ist.
+  2. Für AOT Recording deaktivieren oder klar als nicht unterstützt markieren.
+  3. Recorder-Technik austauschen:
+      - eigene WinMM-P/Invoke-Implementierung statt NAudio.WaveInEvent
+      - oder ein anderer AOT-tauglicher Capture-Stack
+
+  Der sauberste nächste Schritt ist aus meiner Sicht:
+
+  - AOT-Build für File-Transkription behalten
+  - Mikrofon-Recording im AOT-Build explizit blockieren und eine klare Fehlermeldung zeigen
+
+  Wenn du willst, setze ich das direkt um, damit der AOT-Build nicht mehr “Recording started” zeigt und dann still leer endet.
+
+
 • Das Problem bei eurer NativeAOT-Version ist in diesem Repo nicht primär Avalonia oder das Fensterhandling, sondern die native Whisper-Runtime. Eure
   Crash-Daten zeigen einen Access Violation (0xc0000005) direkt in C:\Publish\Whisper\runtimes\vulkan\win-x64\whisper.dll. Das heißt: Der Prozess
   stürzt im nativen Backend ab, bevor euer C#-Code das sauber abfangen kann.

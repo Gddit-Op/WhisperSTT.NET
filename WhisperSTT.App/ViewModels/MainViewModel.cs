@@ -569,8 +569,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             LastError = exception.Message;
-            await LogAsync($"Automatic paste failed: {exception.Message}").ConfigureAwait(true);
+            await LogAsync(CreatePasteFailureLogMessage(exception.Message)).ConfigureAwait(true);
         }
+    }
+
+    private static string CreatePasteFailureLogMessage(string message)
+    {
+        const string prefix = "Automatic paste failed";
+        if (message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return message;
+        }
+
+        return $"{prefix}: {message}";
     }
 
     private void SetStatus(AppStatus status, string text)

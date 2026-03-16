@@ -14,6 +14,12 @@ public sealed class ClipboardPasteService : IPasteService
     private const int PasteRetryCount = 3;
     private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(75);
     private static readonly TimeSpan PasteRetryDelay = TimeSpan.FromMilliseconds(50);
+    private readonly IActivityLogService? _activityLogService;
+
+    public ClipboardPasteService(IActivityLogService? activityLogService = null)
+    {
+        _activityLogService = activityLogService;
+    }
 
     public async Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default)
     {
@@ -153,30 +159,39 @@ public sealed class ClipboardPasteService : IPasteService
         return exception is COMException or ExternalException or InvalidOperationException;
     }
 
-    private static void SendPasteShortcutWithFallback()
+    private void SendPasteShortcutWithFallback()
     {
-        Exception? lastException = null;
+        var targetDiagnostics = CapturePasteTargetDiagnostics();
+        TryWriteDiagnosticLine($"Paste diagnostics: target={targetDiagnostics}.");
+
+        string? lastSendInputDetail = null;
+        string? lastPasteMessageDetail = null;
         for (var attempt = 1; attempt <= PasteRetryCount; attempt++)
         {
-            try
+            if (TrySendPasteShortcut(out var sendInputDetail))
             {
-                if (TrySendPasteShortcut() || TrySendPasteMessage())
-                {
-                    return;
-                }
-            }
-            catch (Exception exception)
-            {
-                lastException = exception;
+                TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: SendInput succeeded.");
+                return;
             }
 
+            lastSendInputDetail = sendInputDetail;
+            TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: SendInput failed: {sendInputDetail}.");
+
+            if (TrySendPasteMessage(targetDiagnostics.ForegroundWindow, out var pasteMessageDetail))
+            {
+                TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: WM_PASTE fallback succeeded.");
+                return;
+            }
+
+            lastPasteMessageDetail = pasteMessageDetail;
+            TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: WM_PASTE fallback failed: {pasteMessageDetail}.");
             Thread.Sleep(PasteRetryDelay);
         }
 
-        throw new InvalidOperationException(CreatePasteFailureMessage(), lastException);
+        throw new InvalidOperationException(CreatePasteFailureMessage(targetDiagnostics, lastSendInputDetail, lastPasteMessageDetail));
     }
 
-    private static bool TrySendPasteShortcut()
+    private static bool TrySendPasteShortcut(out string detail)
     {
         var inputs = new[]
         {
@@ -189,27 +204,30 @@ public sealed class ClipboardPasteService : IPasteService
         var sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
         if (sent == inputs.Length)
         {
+            detail = $"sent {sent}/{inputs.Length} inputs";
             return true;
         }
 
         var errorCode = Marshal.GetLastWin32Error();
         if (errorCode == 0)
         {
+            detail = $"SendInput returned {sent}/{inputs.Length} without a Win32 error";
             return false;
         }
 
-        throw new InvalidOperationException(
-            $"Sending Ctrl+V with SendInput failed ({errorCode}: {new Win32Exception(errorCode).Message}).");
+        detail = $"Win32 {errorCode}: {new Win32Exception(errorCode).Message}";
+        return false;
     }
 
-    private static bool TrySendPasteMessage()
+    private static bool TrySendPasteMessage(IntPtr foregroundWindow, out string detail)
     {
-        var foregroundWindow = NativeMethods.GetForegroundWindow();
         if (foregroundWindow == IntPtr.Zero)
         {
+            detail = "no foreground window";
             return false;
         }
 
+        var failures = new List<string>();
         foreach (var targetWindow in EnumeratePasteTargets(foregroundWindow))
         {
             var sendResult = NativeMethods.SendMessageTimeout(
@@ -223,24 +241,40 @@ public sealed class ClipboardPasteService : IPasteService
 
             if (sendResult != IntPtr.Zero)
             {
+                detail = $"WM_PASTE accepted by {DescribeWindow(targetWindow)}";
                 return true;
             }
+
+            var errorCode = Marshal.GetLastWin32Error();
+            failures.Add(errorCode == 0
+                ? $"{DescribeWindow(targetWindow)} rejected or ignored WM_PASTE"
+                : $"{DescribeWindow(targetWindow)} failed with Win32 {errorCode}: {new Win32Exception(errorCode).Message}");
         }
 
+        detail = failures.Count > 0
+            ? string.Join("; ", failures)
+            : "no paste targets accepted WM_PASTE";
         return false;
     }
 
-    private static string CreatePasteFailureMessage()
+    private static string CreatePasteFailureMessage(
+        PasteTargetDiagnostics diagnostics,
+        string? sendInputDetail,
+        string? pasteMessageDetail)
     {
-        var foregroundWindow = NativeMethods.GetForegroundWindow();
-        if (foregroundWindow == IntPtr.Zero)
+        if (diagnostics.ForegroundWindow == IntPtr.Zero)
         {
             return "Automatic paste failed. The transcript remains on the clipboard because no active target window was detected. Use the Copy button or paste manually.";
         }
 
-        if (TryIsWindowElevated(foregroundWindow, out var isElevated) && isElevated)
+        if (diagnostics.IsElevated)
         {
             return "Automatic paste failed. The transcript remains on the clipboard because the focused target window is running as administrator. Start WhisperSTT as administrator to paste there automatically, or paste manually.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(sendInputDetail) || !string.IsNullOrWhiteSpace(pasteMessageDetail))
+        {
+            return "Automatic paste failed. The transcript remains on the clipboard because the target application rejected both simulated Ctrl+V input and WM_PASTE. Use the Copy button or paste manually.";
         }
 
         return "Automatic paste failed. The transcript remains on the clipboard. Use the Copy button or paste manually.";
@@ -324,6 +358,22 @@ public sealed class ClipboardPasteService : IPasteService
         }
     }
 
+    private static PasteTargetDiagnostics CapturePasteTargetDiagnostics()
+    {
+        var foregroundWindow = NativeMethods.GetForegroundWindow();
+        var focusedWindow = IntPtr.Zero;
+        _ = TryGetFocusedWindow(foregroundWindow, out focusedWindow);
+        var couldDetermineElevation = TryIsWindowElevated(foregroundWindow, out var isElevated);
+
+        return new PasteTargetDiagnostics(
+            foregroundWindow,
+            focusedWindow,
+            DescribeWindow(foregroundWindow),
+            DescribeWindow(focusedWindow),
+            couldDetermineElevation,
+            isElevated);
+    }
+
     private static bool TryGetFocusedWindow(IntPtr foregroundWindow, out IntPtr focusedWindow)
     {
         focusedWindow = IntPtr.Zero;
@@ -361,5 +411,77 @@ public sealed class ClipboardPasteService : IPasteService
                 }
             }
         };
+    }
+
+    private static string DescribeWindow(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero)
+        {
+            return "0x0";
+        }
+
+        _ = NativeMethods.GetWindowThreadProcessId(windowHandle, out var processId);
+        var className = GetWindowClassName(windowHandle);
+        var windowText = GetWindowText(windowHandle);
+        return $"0x{windowHandle.ToInt64():X} pid={processId} class='{className}' title='{windowText}'";
+    }
+
+    private static string GetWindowClassName(IntPtr windowHandle)
+    {
+        var buffer = new char[256];
+        var length = NativeMethods.GetClassName(windowHandle, buffer, buffer.Length);
+        return length > 0 ? new string(buffer, 0, length) : "<unknown>";
+    }
+
+    private static string GetWindowText(IntPtr windowHandle)
+    {
+        var textLength = NativeMethods.GetWindowTextLength(windowHandle);
+        if (textLength <= 0)
+        {
+            return string.Empty;
+        }
+
+        var buffer = new char[textLength + 1];
+        var copiedLength = NativeMethods.GetWindowText(windowHandle, buffer, buffer.Length);
+        return copiedLength > 0 ? new string(buffer, 0, copiedLength) : string.Empty;
+    }
+
+    private void TryWriteDiagnosticLine(string message)
+    {
+        if (_activityLogService is null)
+        {
+            return;
+        }
+
+        _ = WriteDiagnosticLineAsync(message);
+    }
+
+    private async Task WriteDiagnosticLineAsync(string message)
+    {
+        try
+        {
+            await _activityLogService!.WriteAsync(message).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Paste diagnostics must never crash the app.
+        }
+    }
+
+    private readonly record struct PasteTargetDiagnostics(
+        IntPtr ForegroundWindow,
+        IntPtr FocusedWindow,
+        string ForegroundDescription,
+        string FocusedDescription,
+        bool CouldDetermineElevation,
+        bool IsElevated)
+    {
+        public override string ToString()
+        {
+            var elevationText = CouldDetermineElevation
+                ? (IsElevated ? "elevated" : "not elevated")
+                : "elevation unknown";
+            return $"foreground={ForegroundDescription}; focus={FocusedDescription}; {elevationText}";
+        }
     }
 }

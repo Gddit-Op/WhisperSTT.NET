@@ -1,9 +1,9 @@
 using System.IO;
+using NAudio.Wave;
 using SoundFlow.Abstracts;
 using SoundFlow.Abstracts.Devices;
 using SoundFlow.Backends.MiniAudio;
 using SoundFlow.Backends.MiniAudio.Enums;
-using SoundFlow.Components;
 using SoundFlow.Enums;
 using SoundFlow.Structs;
 using WhisperSTT.Core.Models;
@@ -20,7 +20,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
     private readonly object _syncRoot = new();
     private readonly AudioEngine _audioEngine;
     private AudioCaptureDevice? _captureDevice;
-    private Recorder? _recorder;
+    private WaveFileWriter? _writer;
     private TaskCompletionSource<string>? _recordingStoppedSource;
     private string? _currentFilePath;
     private bool _discardOnStop;
@@ -81,10 +81,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
         };
 
         var captureDevice = _audioEngine.InitializeCaptureDevice(deviceInfo, audioFormat, null);
-        var recorder = new Recorder(captureDevice, currentFilePath, "wav")
-        {
-            ProcessCallback = OnRecorderAudioProcessed
-        };
+        var writer = new WaveFileWriter(currentFilePath, new WaveFormat(16000, 16, 1));
 
         lock (_syncRoot)
         {
@@ -98,7 +95,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
             _currentDeviceNumber = deviceNumber;
             _currentDeviceName = string.IsNullOrWhiteSpace(deviceInfo.Name) ? $"Input device {deviceNumber}" : deviceInfo.Name;
             _captureDevice = captureDevice;
-            _recorder = recorder;
+            _writer = writer;
         }
 
         TryWriteDiagnosticLine(
@@ -106,12 +103,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
 
         try
         {
-            var startResult = recorder.StartRecording(null);
-            if (startResult.IsFailure)
-            {
-                throw new InvalidOperationException(startResult.Error?.ToString() ?? "Failed to start SoundFlow recorder.");
-            }
-
+            captureDevice.OnAudioProcessed += OnAudioProcessed;
             captureDevice.Start();
             TryWriteDiagnosticLine("Recorder diagnostics: SoundFlow capture started successfully.");
         }
@@ -182,10 +174,10 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
         _audioEngine.Dispose();
     }
 
-    private async Task FinalizeRecordingAsync(CancellationToken cancellationToken)
+    private Task FinalizeRecordingAsync(CancellationToken cancellationToken)
     {
         AudioCaptureDevice? captureDevice;
-        Recorder? recorder;
+        WaveFileWriter? writer;
         TaskCompletionSource<string>? recordingStoppedSource;
         string currentFilePath;
         bool discardOnStop;
@@ -196,8 +188,8 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
         {
             captureDevice = _captureDevice;
             _captureDevice = null;
-            recorder = _recorder;
-            _recorder = null;
+            writer = _writer;
+            _writer = null;
             recordingStoppedSource = _recordingStoppedSource;
             _recordingStoppedSource = null;
             currentFilePath = _currentFilePath ?? string.Empty;
@@ -213,15 +205,10 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
 
         try
         {
-            if (recorder is not null)
+            if (captureDevice is not null)
             {
-                var stopResult = await recorder.StopRecordingAsync().ConfigureAwait(false);
-                if (stopResult.IsFailure)
-                {
-                    recordingException ??= new InvalidOperationException(stopResult.Error?.ToString() ?? "Failed to stop SoundFlow recorder.");
-                }
+                captureDevice.OnAudioProcessed -= OnAudioProcessed;
             }
-
             captureDevice?.Stop();
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -230,7 +217,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
         }
         finally
         {
-            recorder?.Dispose();
+            writer?.Dispose();
             captureDevice?.Dispose();
         }
 
@@ -251,7 +238,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
             }
 
             recordingStoppedSource?.TrySetException(recordingException);
-            return;
+            return Task.CompletedTask;
         }
 
         if (discardOnStop)
@@ -262,7 +249,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
             }
 
             recordingStoppedSource?.TrySetResult(string.Empty);
-            return;
+            return Task.CompletedTask;
         }
 
         if (!HasUsableAudioData(currentFilePath, recordedSampleCount, recordedFileLength))
@@ -278,17 +265,42 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
             }
 
             recordingStoppedSource?.TrySetResult(string.Empty);
-            return;
+            return Task.CompletedTask;
         }
 
         recordingStoppedSource?.TrySetResult(currentFilePath);
+        return Task.CompletedTask;
     }
 
-    private void OnRecorderAudioProcessed(Span<float> samples, Capability capability)
+    private void OnAudioProcessed(Span<float> samples, Capability capability)
     {
         if (capability is not Capability.Record and not Capability.Mixed)
         {
             return;
+        }
+
+        WaveFileWriter? writer;
+        lock (_syncRoot)
+        {
+            writer = _writer;
+        }
+
+        if (writer is null)
+        {
+            return;
+        }
+
+        var pcmBytes = new byte[samples.Length * sizeof(short)];
+        for (var sampleIndex = 0; sampleIndex < samples.Length; sampleIndex++)
+        {
+            var clamped = Math.Clamp(samples[sampleIndex], -1f, 1f);
+            var sample = (short)Math.Round(clamped * short.MaxValue);
+            BitConverter.TryWriteBytes(pcmBytes.AsSpan(sampleIndex * sizeof(short), sizeof(short)), sample);
+        }
+
+        lock (_syncRoot)
+        {
+            _writer?.Write(pcmBytes, 0, pcmBytes.Length);
         }
 
         var totalSamples = Interlocked.Add(ref _recordedSampleCount, samples.Length);
@@ -316,14 +328,14 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
     private void CleanupActiveRecordingState(bool disposeTask)
     {
         AudioCaptureDevice? captureDevice;
-        Recorder? recorder;
+        WaveFileWriter? writer;
 
         lock (_syncRoot)
         {
             captureDevice = _captureDevice;
             _captureDevice = null;
-            recorder = _recorder;
-            _recorder = null;
+            writer = _writer;
+            _writer = null;
             _recordingStoppedSource = null;
             _currentFilePath = null;
             _discardOnStop = false;
@@ -337,7 +349,12 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
         {
             try
             {
-                recorder?.StopRecording();
+                if (captureDevice is not null)
+                {
+                    captureDevice.OnAudioProcessed -= OnAudioProcessed;
+                }
+
+                captureDevice?.Stop();
             }
             catch
             {
@@ -345,7 +362,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
             }
         }
 
-        recorder?.Dispose();
+        writer?.Dispose();
         captureDevice?.Dispose();
     }
 

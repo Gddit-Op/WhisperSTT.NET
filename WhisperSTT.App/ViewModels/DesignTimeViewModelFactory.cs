@@ -10,14 +10,15 @@ internal static class DesignTimeViewModelFactory
     {
         var paths = new ApplicationPaths();
         var settings = new AppSettings();
+        var logger = new FileActivityLogService(paths);
 
         return new MainViewModel(
             settings,
             new JsonSettingsStore(paths),
-            new FileActivityLogService(paths),
+            logger,
             new TranscriptHistoryService(paths),
             new WhisperModelService(paths),
-            new WhisperTranscriptionService(),
+            new WhisperTranscriptionService(logger),
             new NAudioRecorderService(paths),
             new ClipboardPasteService(),
             new AvaloniaFilePickerService(),

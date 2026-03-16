@@ -47,7 +47,7 @@ public partial class App : Avalonia.Application
             var logger = new FileActivityLogService(paths);
             var history = new TranscriptHistoryService(paths);
             var modelManager = new WhisperModelService(paths);
-            var transcriptionService = new WhisperTranscriptionService();
+            var transcriptionService = new WhisperTranscriptionService(logger);
             var recorderService = new NAudioRecorderService(paths);
             var pasteService = new ClipboardPasteService();
             var filePickerService = new AvaloniaFilePickerService();

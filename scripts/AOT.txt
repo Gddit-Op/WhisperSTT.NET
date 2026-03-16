@@ -1,0 +1,22 @@
+• Das Problem bei eurer NativeAOT-Version ist in diesem Repo nicht primär Avalonia oder das Fensterhandling, sondern die native Whisper-Runtime. Eure
+  Crash-Daten zeigen einen Access Violation (0xc0000005) direkt in C:\Publish\Whisper\runtimes\vulkan\win-x64\whisper.dll. Das heißt: Der Prozess
+  stürzt im nativen Backend ab, bevor euer C#-Code das sauber abfangen kann.
+
+  Konkret lädt die App die Whisper-Backends aus dem runtimes-Ordner und setzt die Reihenfolge in WhisperTranscriptionService.cs:48. Bei Auto wird in
+  WhisperTranscriptionService.cs:81 zuerst Cuda, dann Vulkan, dann OpenVino, dann Cpu probiert. Gleichzeitig ist NativeAOT im Projekt aktiv in
+  WhisperSTT.App.csproj:37 und auch im Publish-Profil in FolderProfile.pubxml:15. Die Kombination aus NativeAOT plus beschleunigtem nativen Whisper-
+  Backend ist hier also der problematische Teil.
+
+  Es gibt dabei eigentlich 2 getrennte NativeAOT-Themen:
+
+  - Laufzeitproblem: whisper.dll aus Vulkan crasht nativ. Das ist der eigentliche App-Absturz.
+  - Buildproblem: NativeAOT-Publish braucht den Windows/MSVC-Linker. Ohne C++-Workload scheitert schon dotnet publish.
+
+  Wichtig: Ich kann aus dem Crashbericht nicht seriös beweisen, ob der eigentliche Fehler in Whisper.net, in der Vulkan-Bibliothek, im Treiber oder in
+  der AOT-Interop-Kombination liegt. Sicher ist nur: der Absturz passiert im nativen Vulkan-Backend, nicht in eurem managed Code.
+
+  Wenn du willst, kann ich als Nächstes eine saubere Lösung einbauen, z. B.:
+
+  1. Auto in AOT beibehalten, aber Vulkan aus der Reihenfolge entfernen,
+  2. AOT und Non-AOT per Buildprofil unterschiedlich behandeln,
+  3. oder einen expliziten Cpu-only AOT-Publishmodus als separate Variante anlegen.

@@ -333,7 +333,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Settings.Transcription.LanguageMode,
             Math.Max(1, threadCount),
             Settings.Transcription.RuntimePreference,
-            Settings.Audio.EnableLivePreview)).ConfigureAwait(true);
+            Settings.Audio.EnableLivePreview,
+            Settings.Logging.EnableLogging)).ConfigureAwait(true);
 
         var detectedLanguageText = string.IsNullOrWhiteSpace(result.DetectedLanguage)
             ? "unknown"

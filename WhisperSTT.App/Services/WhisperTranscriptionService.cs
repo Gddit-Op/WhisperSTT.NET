@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using NLayer.NAudioSupport;
@@ -12,6 +13,13 @@ namespace WhisperSTT.App.Services;
 
 public sealed class WhisperTranscriptionService : ITranscriptionService
 {
+    private readonly IActivityLogService? _activityLogService;
+
+    public WhisperTranscriptionService(IActivityLogService? activityLogService = null)
+    {
+        _activityLogService = activityLogService;
+    }
+
     public async Task<TranscriptionResult> TranscribeAsync(
         TranscriptionRequest request,
         CancellationToken cancellationToken = default)
@@ -46,23 +54,50 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
 
         waveStream.Position = 0;
         RuntimeOptions.LibraryPath = Path.Combine(AppContext.BaseDirectory, "runtimes");
-        RuntimeOptions.RuntimeLibraryOrder = GetRuntimeOrder(request.RuntimePreference);
+        var runtimeOrder = GetRuntimeOrder(request.RuntimePreference);
+        RuntimeOptions.RuntimeLibraryOrder = runtimeOrder;
 
-        using var whisperFactory = WhisperFactory.FromPath(request.ModelPath);
-        var usedRuntime = RuntimeOptions.LoadedLibrary?.ToString()
-            ?? WhisperFactory.GetRuntimeInfo()?.ToString()
-            ?? "unknown";
-        var result = await ProcessWithFallbackAsync(
-            whisperFactory,
-            waveStream,
+        await WriteRuntimeDiagnosticsAsync(
             request,
+            runtimeOrder,
             cancellationToken).ConfigureAwait(false);
 
-        return result with
+        WhisperFactory whisperFactory;
+        try
         {
-            ModelPath = request.ModelPath,
-            UsedRuntime = usedRuntime
-        };
+            whisperFactory = WhisperFactory.FromPath(request.ModelPath);
+        }
+        catch (Exception exception)
+        {
+            await TryWriteDiagnosticLineAsync(
+                $"WhisperFactory.FromPath failed: {exception.GetType().Name}: {exception.Message}",
+                request.EnableDiagnosticLogging,
+                cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+
+        using (whisperFactory)
+        {
+            await TryWriteDiagnosticLineAsync(
+                $"Whisper runtime after WhisperFactory.FromPath: {RuntimeOptions.LoadedLibrary?.ToString() ?? WhisperFactory.GetRuntimeInfo()?.ToString() ?? "unknown"}.",
+                request.EnableDiagnosticLogging,
+                cancellationToken).ConfigureAwait(false);
+
+            var usedRuntime = RuntimeOptions.LoadedLibrary?.ToString()
+                ?? WhisperFactory.GetRuntimeInfo()?.ToString()
+                ?? "unknown";
+            var result = await ProcessWithFallbackAsync(
+                whisperFactory,
+                waveStream,
+                request,
+                cancellationToken).ConfigureAwait(false);
+
+            return result with
+            {
+                ModelPath = request.ModelPath,
+                UsedRuntime = usedRuntime
+            };
+        }
     }
 
     private static WaveStream OpenAudioReader(string audioFilePath)
@@ -109,6 +144,116 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                 RuntimeLibrary.Cpu
             ]
         };
+    }
+
+    private async Task WriteRuntimeDiagnosticsAsync(
+        TranscriptionRequest request,
+        IReadOnlyList<RuntimeLibrary> runtimeOrder,
+        CancellationToken cancellationToken)
+    {
+        if (!request.EnableDiagnosticLogging || _activityLogService is null)
+        {
+            return;
+        }
+
+        var runtimeLibraryPath = RuntimeOptions.LibraryPath ?? string.Empty;
+        var runtimeIdentifier = GetRuntimeIdentifier();
+        var lines = new List<string>
+        {
+            $"Whisper diagnostics: base directory = {AppContext.BaseDirectory}",
+            $"Whisper diagnostics: runtime library path = {runtimeLibraryPath}",
+            $"Whisper diagnostics: runtime identifier = {runtimeIdentifier}",
+            $"Whisper diagnostics: process architecture = {RuntimeInformation.ProcessArchitecture}",
+            $"Whisper diagnostics: framework = {RuntimeInformation.FrameworkDescription}",
+            $"Whisper diagnostics: configured runtime preference = {request.RuntimePreference}",
+            $"Whisper diagnostics: runtime order = {string.Join(", ", runtimeOrder)}",
+            $"Whisper diagnostics: model path = {request.ModelPath}",
+            $"Whisper diagnostics: model file exists = {File.Exists(request.ModelPath)}",
+            $"Whisper diagnostics: audio path = {request.AudioFilePath}",
+            $"Whisper diagnostics: audio file exists = {File.Exists(request.AudioFilePath)}",
+            $"Whisper diagnostics: loaded runtime before WhisperFactory.FromPath = {RuntimeOptions.LoadedLibrary?.ToString() ?? "null"}"
+        };
+
+        foreach (var runtimeLibrary in runtimeOrder)
+        {
+            lines.Add(DescribeRuntimeCandidate(runtimeLibrary, runtimeLibraryPath, runtimeIdentifier));
+        }
+
+        foreach (var line in lines)
+        {
+            await TryWriteDiagnosticLineAsync(line, enabled: true, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task TryWriteDiagnosticLineAsync(
+        string line,
+        bool enabled,
+        CancellationToken cancellationToken)
+    {
+        if (!enabled || _activityLogService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _activityLogService.WriteAsync(line, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Diagnostic logging must never block transcription.
+        }
+    }
+
+    private static string DescribeRuntimeCandidate(
+        RuntimeLibrary runtimeLibrary,
+        string runtimeLibraryPath,
+        string runtimeIdentifier)
+    {
+        var candidateDirectory = GetRuntimeCandidateDirectory(runtimeLibrary, runtimeLibraryPath, runtimeIdentifier);
+        var whisperDllPath = Path.Combine(candidateDirectory, "whisper.dll");
+        var whisperFiles = Directory.Exists(candidateDirectory)
+            ? Directory.EnumerateFiles(candidateDirectory, "*whisper.dll")
+                .Select(Path.GetFileName)
+                .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
+                .OrderBy(fileName => fileName, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : [];
+
+        var whisperFilesText = whisperFiles.Length == 0
+            ? "none"
+            : string.Join(", ", whisperFiles);
+
+        return $"Whisper diagnostics: candidate {runtimeLibrary} directory = {candidateDirectory}; exists = {Directory.Exists(candidateDirectory)}; whisper.dll exists = {File.Exists(whisperDllPath)}; whisper-related files = [{whisperFilesText}]";
+    }
+
+    private static string GetRuntimeCandidateDirectory(
+        RuntimeLibrary runtimeLibrary,
+        string runtimeLibraryPath,
+        string runtimeIdentifier)
+    {
+        return runtimeLibrary switch
+        {
+            RuntimeLibrary.Cpu => Path.Combine(runtimeLibraryPath, runtimeIdentifier),
+            RuntimeLibrary.Cuda => Path.Combine(runtimeLibraryPath, "cuda", runtimeIdentifier),
+            RuntimeLibrary.OpenVino => Path.Combine(runtimeLibraryPath, "openvino", runtimeIdentifier),
+            RuntimeLibrary.Vulkan => Path.Combine(runtimeLibraryPath, "vulkan", runtimeIdentifier),
+            _ => runtimeLibraryPath
+        };
+    }
+
+    private static string GetRuntimeIdentifier()
+    {
+        var architecture = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64 => "x64",
+            Architecture.X86 => "x86",
+            Architecture.Arm64 => "arm64",
+            Architecture.Arm => "arm",
+            _ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()
+        };
+
+        return $"win-{architecture}";
     }
 
     private static async Task<TranscriptionResult> ProcessWithFallbackAsync(

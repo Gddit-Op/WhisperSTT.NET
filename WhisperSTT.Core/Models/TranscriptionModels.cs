@@ -6,7 +6,8 @@ public sealed record TranscriptionRequest(
     LanguageMode LanguageMode,
     int ThreadCount,
     WhisperRuntimePreference RuntimePreference,
-    bool IsLivePreview = false);
+    bool IsLivePreview = false,
+    bool EnableDiagnosticLogging = false);
 
 public sealed record TranscriptionSegment(TimeSpan Start, TimeSpan End, string Text);
 

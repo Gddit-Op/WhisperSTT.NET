@@ -52,10 +52,12 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         RuntimeOptions.LibraryPath = Path.Combine(AppContext.BaseDirectory, "runtimes");
         var runtimeOrder = GetRuntimeOrder(request.RuntimePreference);
         RuntimeOptions.RuntimeLibraryOrder = runtimeOrder;
+        var openVinoEncoderPath = TryResolveOpenVinoEncoderPath(request.ModelPath);
 
         await WriteRuntimeDiagnosticsAsync(
             request,
             runtimeOrder,
+            openVinoEncoderPath,
             cancellationToken).ConfigureAwait(false);
 
         WhisperFactory whisperFactory;
@@ -86,6 +88,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                 whisperFactory,
                 waveStream,
                 request,
+                openVinoEncoderPath,
                 cancellationToken).ConfigureAwait(false);
 
             return result with
@@ -155,6 +158,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
     private async Task WriteRuntimeDiagnosticsAsync(
         TranscriptionRequest request,
         IReadOnlyList<RuntimeLibrary> runtimeOrder,
+        string? openVinoEncoderPath,
         CancellationToken cancellationToken)
     {
         if (!request.EnableDiagnosticLogging || _activityLogService is null)
@@ -175,6 +179,9 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
             $"Whisper diagnostics: runtime order = {string.Join(", ", runtimeOrder)}",
             $"Whisper diagnostics: model path = {request.ModelPath}",
             $"Whisper diagnostics: model file exists = {File.Exists(request.ModelPath)}",
+            $"Whisper diagnostics: OpenVINO encoder xml path = {openVinoEncoderPath ?? "<auto>"}",
+            $"Whisper diagnostics: OpenVINO encoder xml exists = {!string.IsNullOrWhiteSpace(openVinoEncoderPath) && File.Exists(openVinoEncoderPath)}",
+            $"Whisper diagnostics: OpenVINO encoder bin exists = {HasOpenVinoWeights(openVinoEncoderPath)}",
             $"Whisper diagnostics: audio path = {request.AudioFilePath}",
             $"Whisper diagnostics: audio file exists = {File.Exists(request.AudioFilePath)}",
             $"Whisper diagnostics: loaded runtime before WhisperFactory.FromPath = {RuntimeOptions.LoadedLibrary?.ToString() ?? "null"}"
@@ -266,6 +273,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         WhisperFactory whisperFactory,
         MemoryStream waveStream,
         TranscriptionRequest request,
+        string? openVinoEncoderPath,
         CancellationToken cancellationToken)
     {
         try
@@ -274,6 +282,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                 whisperFactory,
                 waveStream,
                 request.LanguageMode,
+                openVinoEncoderPath,
                 request.ThreadCount,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -287,6 +296,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                         whisperFactory,
                         waveStream,
                         fallbackLanguage,
+                        openVinoEncoderPath,
                         request.ThreadCount,
                         cancellationToken).ConfigureAwait(false);
 
@@ -308,6 +318,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         WhisperFactory whisperFactory,
         MemoryStream waveStream,
         LanguageMode languageMode,
+        string? openVinoEncoderPath,
         int threadCount,
         CancellationToken cancellationToken)
     {
@@ -315,6 +326,11 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
 
         var builder = whisperFactory.CreateBuilder()
             .WithThreads(Math.Max(1, threadCount));
+
+        if (!string.IsNullOrWhiteSpace(openVinoEncoderPath) && File.Exists(openVinoEncoderPath))
+        {
+            builder = builder.WithOpenVinoEncoder(openVinoEncoderPath, "GPU", null!);
+        }
 
         builder = languageMode switch
         {
@@ -366,6 +382,40 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
     private static string ToLanguageCode(LanguageMode languageMode)
     {
         return languageMode == LanguageMode.De ? "de" : "en";
+    }
+
+    private static string? TryResolveOpenVinoEncoderPath(string modelPath)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath))
+        {
+            return null;
+        }
+
+        var directory = Path.GetDirectoryName(modelPath);
+        var modelFileNameWithoutExtension = Path.GetFileNameWithoutExtension(modelPath);
+        if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(modelFileNameWithoutExtension))
+        {
+            return null;
+        }
+
+        var candidatePaths = new[]
+        {
+            Path.Combine(directory, $"{modelFileNameWithoutExtension}-encoder.xml"),
+            Path.Combine(directory, $"{modelFileNameWithoutExtension}-encoder-openvino.xml")
+        };
+
+        return candidatePaths.FirstOrDefault(File.Exists);
+    }
+
+    private static bool HasOpenVinoWeights(string? openVinoEncoderPath)
+    {
+        if (string.IsNullOrWhiteSpace(openVinoEncoderPath))
+        {
+            return false;
+        }
+
+        var weightsPath = Path.ChangeExtension(openVinoEncoderPath, ".bin");
+        return !string.IsNullOrWhiteSpace(weightsPath) && File.Exists(weightsPath);
     }
 
     private sealed class MultiChannelToMonoSampleProvider : ISampleProvider

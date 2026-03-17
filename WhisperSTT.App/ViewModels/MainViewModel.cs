@@ -61,6 +61,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording || _audioRecorderService.IsRecording);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync);
         BrowseFileCommand = new AsyncRelayCommand(BrowseFileAsync);
+        BrowseOpenVinoRuntimePathCommand = new AsyncRelayCommand(BrowseOpenVinoRuntimePathAsync);
         TranscribeFileCommand = new AsyncRelayCommand(TranscribeSelectedFileAsync, CanTranscribeFile);
         DownloadModelCommand = new AsyncRelayCommand(DownloadSelectedModelAsync, () => Status != AppStatus.Recording);
         CopyLatestTranscriptCommand = new AsyncRelayCommand(CopyLatestTranscriptAsync, CanCopyLatestTranscript);
@@ -90,6 +91,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand SaveSettingsCommand { get; }
 
     public AsyncRelayCommand BrowseFileCommand { get; }
+
+    public AsyncRelayCommand BrowseOpenVinoRuntimePathCommand { get; }
 
     public AsyncRelayCommand TranscribeFileCommand { get; }
 
@@ -177,6 +180,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _lastError;
         private set => SetProperty(ref _lastError, value);
+    }
+
+    public string OpenVinoRuntimePath
+    {
+        get => Settings.Transcription.OpenVinoRuntimePath;
+        set
+        {
+            if (string.Equals(Settings.Transcription.OpenVinoRuntimePath, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Settings.Transcription.OpenVinoRuntimePath = value;
+            OnPropertyChanged();
+        }
     }
 
     public string LastDetectedLanguage
@@ -351,6 +369,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Settings.Transcription.LanguageMode,
             Math.Max(1, threadCount),
             Settings.Transcription.RuntimePreference,
+            OpenVinoRuntimePath,
             Settings.Audio.EnableLivePreview,
             Settings.Logging.EnableLogging)).ConfigureAwait(true);
 
@@ -378,6 +397,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedFilePath = filePath;
         TryLoadPreview(filePath);
         RaiseCommandStates();
+    }
+
+    private async Task BrowseOpenVinoRuntimePathAsync()
+    {
+        var folderPath = await _filePickerService
+            .PickFolderAsync("Select OpenVINO Toolkit folder")
+            .ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(folderPath))
+        {
+            return;
+        }
+
+        OpenVinoRuntimePath = folderPath;
+        LastError = $"OpenVINO Toolkit folder selected: {folderPath}";
     }
 
     private async Task TranscribeSelectedFileAsync()

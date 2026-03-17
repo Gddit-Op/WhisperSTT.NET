@@ -248,6 +248,19 @@
                   <TextBox Text="{Binding Settings.Transcription.CustomModelId}" />
                   <TextBlock Margin="0,16,0,4" Text="Custom Model Path" />
                   <TextBox Text="{Binding Settings.Transcription.CustomModelPath}" />
+                  <TextBlock Margin="0,16,0,4" Text="OpenVINO Toolkit Path" />
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Margin="0,0,12,0"
+                             Text="{Binding OpenVinoRuntimePath}" />
+                    <Button Grid.Column="1"
+                            Padding="12,6"
+                            Command="{Binding BrowseOpenVinoRuntimePathCommand}"
+                            Content="Browse" />
+                  </Grid>
+                  <TextBlock Margin="0,8,0,0"
+                             Opacity="0.7"
+                             Text="Select the folder that contains the OpenVINO runtime binaries. When set, it is added to the process PATH before OpenVINO is initialized."
+                             TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"
                              Text="Whisper.net uses local ggml model files. If Custom Model Path points to a local file, it takes priority over preset mapping. Runtime Auto prefers CUDA, then Vulkan, then OpenVino, then CPU."

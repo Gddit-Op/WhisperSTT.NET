@@ -6,6 +6,7 @@ public sealed record TranscriptionRequest(
     LanguageMode LanguageMode,
     int ThreadCount,
     WhisperRuntimePreference RuntimePreference,
+    string OpenVinoRuntimePath = "",
     bool IsLivePreview = false,
     bool EnableDiagnosticLogging = false);
 

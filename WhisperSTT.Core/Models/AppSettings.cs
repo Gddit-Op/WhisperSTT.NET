@@ -47,6 +47,8 @@ public sealed class TranscriptionSettings
 
     public string CustomModelPath { get; set; } = string.Empty;
 
+    public string OpenVinoRuntimePath { get; set; } = string.Empty;
+
     public string LastFilePath { get; set; } = string.Empty;
 }
 

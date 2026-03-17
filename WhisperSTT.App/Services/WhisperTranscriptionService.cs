@@ -52,6 +52,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         RuntimeOptions.LibraryPath = Path.Combine(AppContext.BaseDirectory, "runtimes");
         var runtimeOrder = GetRuntimeOrder(request.RuntimePreference);
         RuntimeOptions.RuntimeLibraryOrder = runtimeOrder;
+        EnsureOpenVinoRuntimePathOnProcessPath(request.OpenVinoRuntimePath, runtimeOrder);
         var openVinoEncoderPath = TryResolveOpenVinoEncoderPath(request.ModelPath);
 
         await WriteRuntimeDiagnosticsAsync(
@@ -177,6 +178,9 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
             $"Whisper diagnostics: framework = {RuntimeInformation.FrameworkDescription}",
             $"Whisper diagnostics: configured runtime preference = {request.RuntimePreference}",
             $"Whisper diagnostics: runtime order = {string.Join(", ", runtimeOrder)}",
+            $"Whisper diagnostics: configured OpenVINO runtime path = {request.OpenVinoRuntimePath}",
+            $"Whisper diagnostics: OpenVINO runtime path exists = {!string.IsNullOrWhiteSpace(request.OpenVinoRuntimePath) && Directory.Exists(request.OpenVinoRuntimePath)}",
+            $"Whisper diagnostics: process PATH contains OpenVINO runtime path = {ContainsPathEntry(Environment.GetEnvironmentVariable("PATH"), request.OpenVinoRuntimePath)}",
             $"Whisper diagnostics: model path = {request.ModelPath}",
             $"Whisper diagnostics: model file exists = {File.Exists(request.ModelPath)}",
             $"Whisper diagnostics: OpenVINO encoder xml path = {openVinoEncoderPath ?? "<auto>"}",
@@ -405,6 +409,45 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         };
 
         return candidatePaths.FirstOrDefault(File.Exists);
+    }
+
+    private static void EnsureOpenVinoRuntimePathOnProcessPath(
+        string? openVinoRuntimePath,
+        IReadOnlyCollection<RuntimeLibrary> runtimeOrder)
+    {
+        if (string.IsNullOrWhiteSpace(openVinoRuntimePath) ||
+            !runtimeOrder.Contains(RuntimeLibrary.OpenVino) ||
+            !Directory.Exists(openVinoRuntimePath))
+        {
+            return;
+        }
+
+        var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        if (ContainsPathEntry(currentPath, openVinoRuntimePath))
+        {
+            return;
+        }
+
+        Environment.SetEnvironmentVariable(
+            "PATH",
+            $"{openVinoRuntimePath}{Path.PathSeparator}{currentPath}",
+            EnvironmentVariableTarget.Process);
+    }
+
+    private static bool ContainsPathEntry(string? currentPath, string? candidatePath)
+    {
+        if (string.IsNullOrWhiteSpace(currentPath) || string.IsNullOrWhiteSpace(candidatePath))
+        {
+            return false;
+        }
+
+        var normalizedCandidate = Path.TrimEndingDirectorySeparator(candidatePath);
+        return currentPath
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(entry => string.Equals(
+                Path.TrimEndingDirectorySeparator(entry),
+                normalizedCandidate,
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool HasOpenVinoWeights(string? openVinoEncoderPath)

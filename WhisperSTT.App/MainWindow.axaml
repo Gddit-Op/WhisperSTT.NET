@@ -194,6 +194,10 @@
             <Button Width="90"
                     Command="{Binding StopPreviewCommand}"
                     Content="Stop" />
+            <TextBlock Margin="16,0,0,0"
+                       VerticalAlignment="Center"
+                       FontWeight="SemiBold"
+                       Text="{Binding FileTranscriptionElapsedText}" />
           </StackPanel>
 
           <Border Grid.Row="2"

@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Media;
 using System.IO;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using AvaloniaBrushes = Avalonia.Media.Brushes;
@@ -21,10 +23,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly IPasteService _pasteService;
     private readonly IFilePickerService _filePickerService;
     private readonly IAudioPreviewService _audioPreviewService;
+    private readonly Stopwatch _fileTranscriptionStopwatch = new();
+    private readonly DispatcherTimer _fileTranscriptionTimer;
     private AppStatus _status = AppStatus.Idle;
     private string _statusText = "Idle";
     private string _currentTranscript = string.Empty;
     private string _fileTranscript = string.Empty;
+    private string _fileTranscriptionElapsedText = "Transcription time: -";
     private string _selectedFilePath;
     private string _lastError = "No errors.";
     private string _lastDetectedLanguage = "unknown";
@@ -55,6 +60,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _pasteService = pasteService;
         _filePickerService = filePickerService;
         _audioPreviewService = audioPreviewService;
+        _fileTranscriptionTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(200)
+        };
+        _fileTranscriptionTimer.Tick += OnFileTranscriptionTimerTick;
         _selectedFilePath = settings.Transcription.LastFilePath;
 
         ToggleRecordingCommand = new AsyncRelayCommand(ToggleRecordingAsync, () => Status != AppStatus.Transcribing);
@@ -157,6 +167,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _fileTranscript, value);
     }
 
+    public string FileTranscriptionElapsedText
+    {
+        get => _fileTranscriptionElapsedText;
+        private set => SetProperty(ref _fileTranscriptionElapsedText, value);
+    }
+
     public string SelectedFilePath
     {
         get => _selectedFilePath;
@@ -165,6 +181,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _selectedFilePath, value))
             {
                 Settings.Transcription.LastFilePath = value;
+                ResetFileTranscriptionTiming();
                 if (!string.Equals(_audioPreviewService.LoadedFilePath, value, StringComparison.OrdinalIgnoreCase))
                 {
                     _audioPreviewService.Unload();
@@ -303,6 +320,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _fileTranscriptionTimer.Stop();
+        _fileTranscriptionTimer.Tick -= OnFileTranscriptionTimerTick;
         _audioPreviewService.Dispose();
     }
 
@@ -415,6 +434,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task TranscribeSelectedFileAsync()
     {
+        StartFileTranscriptionTiming();
+
         try
         {
             SetStatus(AppStatus.Transcribing, "Transcribing local file");
@@ -435,6 +456,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             await HandleExceptionAsync(exception).ConfigureAwait(true);
+        }
+        finally
+        {
+            StopFileTranscriptionTiming();
         }
     }
 
@@ -642,5 +667,41 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             sound.Play();
         }
+    }
+
+    private void OnFileTranscriptionTimerTick(object? sender, EventArgs e)
+    {
+        FileTranscriptionElapsedText = $"Transcription time: {FormatElapsed(_fileTranscriptionStopwatch.Elapsed)}";
+    }
+
+    private void StartFileTranscriptionTiming()
+    {
+        _fileTranscriptionStopwatch.Reset();
+        _fileTranscriptionStopwatch.Start();
+        FileTranscriptionElapsedText = "Transcription time: 00:00.0";
+        _fileTranscriptionTimer.Start();
+    }
+
+    private void StopFileTranscriptionTiming()
+    {
+        if (_fileTranscriptionStopwatch.IsRunning)
+        {
+            _fileTranscriptionStopwatch.Stop();
+        }
+
+        _fileTranscriptionTimer.Stop();
+        FileTranscriptionElapsedText = $"Transcription time: {FormatElapsed(_fileTranscriptionStopwatch.Elapsed)}";
+    }
+
+    private void ResetFileTranscriptionTiming()
+    {
+        _fileTranscriptionTimer.Stop();
+        _fileTranscriptionStopwatch.Reset();
+        FileTranscriptionElapsedText = "Transcription time: -";
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        return $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00}.{elapsed.Milliseconds / 100}";
     }
 }

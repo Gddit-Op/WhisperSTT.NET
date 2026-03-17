@@ -1,9 +1,10 @@
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
-using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
-using NLayer.NAudioSupport;
+using SoundFlow.Backends.MiniAudio;
+using SoundFlow.Backends.MiniAudio.Enums;
+using SoundFlow.Structs;
+using SoundFlow.Utils;
 using Whisper.net;
 using Whisper.net.LibraryLoader;
 using WhisperSTT.Core.Models;
@@ -37,16 +38,8 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         }
 
         await using var waveStream = new MemoryStream();
-        using var audioReader = OpenAudioReader(request.AudioFilePath);
-        var sampleProvider = NormalizeToMono(audioReader.ToSampleProvider());
-
-        if (sampleProvider.WaveFormat.SampleRate != 16000)
-        {
-            sampleProvider = new WdlResamplingSampleProvider(sampleProvider, 16000);
-        }
-
-        var pcmProvider = new SampleToWaveProvider16(sampleProvider);
-        WaveFileWriter.WriteWavFileToStream(waveStream, pcmProvider);
+        var waveSamples = LoadWhisperInputSamples(request.AudioFilePath);
+        WaveFileUtility.WritePcm16WaveFile(waveStream, waveSamples, sampleRate: 16000, channels: 1);
 
         waveStream.Position = 0;
         RuntimeOptions.LibraryPath = Path.Combine(AppContext.BaseDirectory, "runtimes");
@@ -100,27 +93,49 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         }
     }
 
-    private static WaveStream OpenAudioReader(string audioFilePath)
+    private static float[] LoadWhisperInputSamples(string audioFilePath)
     {
-        var extension = Path.GetExtension(audioFilePath);
-        return extension.ToLowerInvariant() switch
+        using var audioEngine = new MiniAudioEngine(Array.Empty<MiniAudioBackend>());
+        using var inputStream = File.OpenRead(audioFilePath);
+        using var decoder = audioEngine.CreateDecoder(inputStream, out var detectedFormat, hintFormat: null);
+
+        var sourceChannels = decoder.Channels > 0 ? decoder.Channels : detectedFormat.Channels;
+        var sourceSampleRate = decoder.SampleRate > 0 ? decoder.SampleRate : detectedFormat.SampleRate;
+        if (sourceChannels <= 0 || sourceSampleRate <= 0)
         {
-            ".wav" => new WaveFileReader(audioFilePath),
-            ".mp3" => new Mp3FileReaderBase(
-                audioFilePath,
-                new Mp3FileReaderBase.FrameDecompressorBuilder(format => new Mp3FrameDecompressor(format))),
-            _ => new AudioFileReader(audioFilePath)
-        };
+            throw new InvalidOperationException($"Unable to determine audio format for '{audioFilePath}'.");
+        }
+
+        var readBuffer = new float[Math.Max(4096, sourceChannels * 4096)];
+        var samples = new List<float>(readBuffer.Length * 4);
+        while (true)
+        {
+            var samplesRead = decoder.Decode(readBuffer);
+            if (samplesRead <= 0)
+            {
+                break;
+            }
+
+            for (var sampleIndex = 0; sampleIndex < samplesRead; sampleIndex++)
+            {
+                samples.Add(readBuffer[sampleIndex]);
+            }
+        }
+
+        var monoSamples = NormalizeToMono(samples.ToArray(), sourceChannels);
+        return sourceSampleRate == 16000
+            ? monoSamples
+            : MathHelper.ResampleLinear(monoSamples, channels: 1, sourceRate: sourceSampleRate, targetRate: 16000);
     }
 
-    private static ISampleProvider NormalizeToMono(ISampleProvider sampleProvider)
+    private static float[] NormalizeToMono(float[] samples, int channels)
     {
-        return sampleProvider.WaveFormat.Channels switch
+        if (channels <= 1)
         {
-            <= 1 => sampleProvider,
-            2 => new StereoToMonoSampleProvider(sampleProvider),
-            _ => new MultiChannelToMonoSampleProvider(sampleProvider)
-        };
+            return samples;
+        }
+
+        return ChannelMixer.Mix(samples, channels, targetChannels: 1);
     }
 
     private static List<RuntimeLibrary> GetRuntimeOrder(WhisperRuntimePreference preference)
@@ -461,43 +476,4 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         return !string.IsNullOrWhiteSpace(weightsPath) && File.Exists(weightsPath);
     }
 
-    private sealed class MultiChannelToMonoSampleProvider : ISampleProvider
-    {
-        private readonly ISampleProvider _source;
-        private readonly int _sourceChannels;
-
-        public MultiChannelToMonoSampleProvider(ISampleProvider source)
-        {
-            _source = source;
-            _sourceChannels = source.WaveFormat.Channels;
-            WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, 1);
-        }
-
-        public WaveFormat WaveFormat { get; }
-
-        public int Read(float[] buffer, int offset, int count)
-        {
-            var sourceBuffer = new float[count * _sourceChannels];
-            var samplesRead = _source.Read(sourceBuffer, 0, sourceBuffer.Length);
-            if (samplesRead <= 0)
-            {
-                return 0;
-            }
-
-            var framesRead = samplesRead / _sourceChannels;
-            for (var frameIndex = 0; frameIndex < framesRead; frameIndex++)
-            {
-                float sum = 0;
-                var sourceOffset = frameIndex * _sourceChannels;
-                for (var channelIndex = 0; channelIndex < _sourceChannels; channelIndex++)
-                {
-                    sum += sourceBuffer[sourceOffset + channelIndex];
-                }
-
-                buffer[offset + frameIndex] = sum / _sourceChannels;
-            }
-
-            return framesRead;
-        }
-    }
 }

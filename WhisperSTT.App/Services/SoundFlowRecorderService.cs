@@ -1,5 +1,4 @@
 using System.IO;
-using NAudio.Wave;
 using SoundFlow.Abstracts;
 using SoundFlow.Abstracts.Devices;
 using SoundFlow.Backends.MiniAudio;
@@ -11,16 +10,15 @@ using WhisperSTT.Core.Services;
 
 namespace WhisperSTT.App.Services;
 
-public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
+public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposable
 {
-    private const int SoundFlowBufferSize = 8192;
     private const int WaveHeaderSizeBytes = 44;
     private readonly ApplicationPaths _paths;
     private readonly IActivityLogService? _activityLogService;
     private readonly object _syncRoot = new();
     private readonly AudioEngine _audioEngine;
     private AudioCaptureDevice? _captureDevice;
-    private WaveFileWriter? _writer;
+    private WaveFileUtility.Pcm16WaveFileWriter? _writer;
     private TaskCompletionSource<string>? _recordingStoppedSource;
     private string? _currentFilePath;
     private bool _discardOnStop;
@@ -31,7 +29,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
     private int _currentDeviceNumber = -1;
     private string _currentDeviceName = string.Empty;
 
-    public NAudioRecorderService(ApplicationPaths paths, IActivityLogService? activityLogService = null)
+    public SoundFlowRecorderService(ApplicationPaths paths, IActivityLogService? activityLogService = null)
     {
         _paths = paths;
         _activityLogService = activityLogService;
@@ -81,7 +79,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
         };
 
         var captureDevice = _audioEngine.InitializeCaptureDevice(deviceInfo, audioFormat, null);
-        var writer = new WaveFileWriter(currentFilePath, new WaveFormat(16000, 16, 1));
+        var writer = WaveFileUtility.CreatePcm16Writer(currentFilePath, sampleRate: 16000, channels: 1);
 
         lock (_syncRoot)
         {
@@ -177,7 +175,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
     private Task FinalizeRecordingAsync(CancellationToken cancellationToken)
     {
         AudioCaptureDevice? captureDevice;
-        WaveFileWriter? writer;
+        WaveFileUtility.Pcm16WaveFileWriter? writer;
         TaskCompletionSource<string>? recordingStoppedSource;
         string currentFilePath;
         bool discardOnStop;
@@ -279,7 +277,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
             return;
         }
 
-        WaveFileWriter? writer;
+        WaveFileUtility.Pcm16WaveFileWriter? writer;
         lock (_syncRoot)
         {
             writer = _writer;
@@ -290,17 +288,9 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
             return;
         }
 
-        var pcmBytes = new byte[samples.Length * sizeof(short)];
-        for (var sampleIndex = 0; sampleIndex < samples.Length; sampleIndex++)
-        {
-            var clamped = Math.Clamp(samples[sampleIndex], -1f, 1f);
-            var sample = (short)Math.Round(clamped * short.MaxValue);
-            BitConverter.TryWriteBytes(pcmBytes.AsSpan(sampleIndex * sizeof(short), sizeof(short)), sample);
-        }
-
         lock (_syncRoot)
         {
-            _writer?.Write(pcmBytes, 0, pcmBytes.Length);
+            _writer?.WriteSamples(samples);
         }
 
         var totalSamples = Interlocked.Add(ref _recordedSampleCount, samples.Length);
@@ -328,7 +318,7 @@ public sealed class NAudioRecorderService : IAudioRecorderService, IDisposable
     private void CleanupActiveRecordingState(bool disposeTask)
     {
         AudioCaptureDevice? captureDevice;
-        WaveFileWriter? writer;
+        WaveFileUtility.Pcm16WaveFileWriter? writer;
 
         lock (_syncRoot)
         {

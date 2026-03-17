@@ -37,11 +37,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
             throw new FileNotFoundException("Whisper model file not found.", request.ModelPath);
         }
 
-        await using var waveStream = new MemoryStream();
         var waveSamples = LoadWhisperInputSamples(request.AudioFilePath);
-        WaveFileUtility.WritePcm16WaveFile(waveStream, waveSamples, sampleRate: 16000, channels: 1);
-
-        waveStream.Position = 0;
         RuntimeOptions.LibraryPath = Path.Combine(AppContext.BaseDirectory, "runtimes");
         var runtimeOrder = GetRuntimeOrder(request.RuntimePreference);
         RuntimeOptions.RuntimeLibraryOrder = runtimeOrder;
@@ -80,7 +76,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                 ?? "unknown";
             var result = await ProcessWithFallbackAsync(
                 whisperFactory,
-                waveStream,
+                waveSamples,
                 request,
                 openVinoEncoderPath,
                 cancellationToken).ConfigureAwait(false);
@@ -290,7 +286,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
 
     private static async Task<TranscriptionResult> ProcessWithFallbackAsync(
         WhisperFactory whisperFactory,
-        MemoryStream waveStream,
+        float[] waveSamples,
         TranscriptionRequest request,
         string? openVinoEncoderPath,
         CancellationToken cancellationToken)
@@ -299,7 +295,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         {
             return await ProcessOnceAsync(
                 whisperFactory,
-                waveStream,
+                waveSamples,
                 request.LanguageMode,
                 openVinoEncoderPath,
                 request.ThreadCount,
@@ -313,7 +309,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                 {
                     var fallbackResult = await ProcessOnceAsync(
                         whisperFactory,
-                        waveStream,
+                        waveSamples,
                         fallbackLanguage,
                         openVinoEncoderPath,
                         request.ThreadCount,
@@ -335,14 +331,12 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
 
     private static async Task<TranscriptionResult> ProcessOnceAsync(
         WhisperFactory whisperFactory,
-        MemoryStream waveStream,
+        ReadOnlyMemory<float> waveSamples,
         LanguageMode languageMode,
         string? openVinoEncoderPath,
         int threadCount,
         CancellationToken cancellationToken)
     {
-        waveStream.Position = 0;
-
         var builder = whisperFactory.CreateBuilder()
             .WithThreads(Math.Max(1, threadCount));
 
@@ -361,7 +355,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
 
         var segments = new List<TranscriptionSegment>();
         var detectedLanguages = new List<string>();
-        await foreach (var segment in processor.ProcessAsync(waveStream))
+        await foreach (var segment in processor.ProcessAsync(waveSamples, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             segments.Add(new TranscriptionSegment(segment.Start, segment.End, segment.Text));

@@ -17,24 +17,26 @@
             Background="{StaticResource PanelBrush}">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel>
-          <TextBlock FontSize="28"
-                     FontWeight="SemiBold"
-                     Foreground="{StaticResource TextBrush}"
-                     Text="WhisperSTT" />
+          <StackPanel Orientation="Horizontal"
+                      Spacing="12">
+            <TextBlock FontSize="28"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextBrush}"
+                       Text="WhisperSTT" />
+            <Border Padding="10,6"
+                    VerticalAlignment="Center"
+                    Background="{Binding StatusBrush}"
+                    CornerRadius="999">
+              <TextBlock Foreground="White"
+                         FontWeight="SemiBold"
+                         Text="{Binding StatusText}" />
+            </Border>
+          </StackPanel>
           <TextBlock Margin="0,8,0,0"
                      FontSize="14"
                      Foreground="{StaticResource TextBrush}"
                      Opacity="0.75"
                      Text="Offline desktop speech-to-text for system-wide dictation and local file transcription." />
-          <Border Margin="0,14,0,0"
-                  Padding="10,6"
-                  HorizontalAlignment="Left"
-                  Background="{Binding StatusBrush}"
-                  CornerRadius="999">
-            <TextBlock Foreground="White"
-                       FontWeight="SemiBold"
-                       Text="{Binding StatusText}" />
-          </Border>
         </StackPanel>
 
         <StackPanel Grid.Column="1"

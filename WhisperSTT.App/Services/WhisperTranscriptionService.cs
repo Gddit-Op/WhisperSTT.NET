@@ -12,9 +12,12 @@ using WhisperSTT.Core.Services;
 
 namespace WhisperSTT.App.Services;
 
-public sealed class WhisperTranscriptionService : ITranscriptionService
+public sealed class WhisperTranscriptionService : ITranscriptionService, IDisposable
 {
+    private readonly object _factorySync = new();
     private readonly IActivityLogService? _activityLogService;
+    private CachedFactory? _cachedFactory;
+    private bool _disposed;
 
     public WhisperTranscriptionService(IActivityLogService? activityLogService = null)
     {
@@ -26,6 +29,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (!File.Exists(request.AudioFilePath))
         {
@@ -51,23 +55,28 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
             cancellationToken).ConfigureAwait(false);
 
         WhisperFactory whisperFactory;
+        bool cacheHit;
         try
         {
-            whisperFactory = WhisperFactory.FromPath(request.ModelPath);
+            whisperFactory = GetOrCreateFactory(request, out cacheHit);
         }
         catch (Exception exception)
         {
             await TryWriteDiagnosticLineAsync(
-                $"WhisperFactory.FromPath failed: {exception.GetType().Name}: {exception.Message}",
+                $"WhisperFactory acquisition failed: {exception.GetType().Name}: {exception.Message}",
                 request.EnableDiagnosticLogging,
                 cancellationToken).ConfigureAwait(false);
             throw;
         }
 
-        using (whisperFactory)
+        await TryWriteDiagnosticLineAsync(
+            $"Whisper factory cache {(cacheHit ? "hit" : "miss")} for model '{request.ModelPath}' with runtime {request.RuntimePreference}.",
+            request.EnableDiagnosticLogging,
+            cancellationToken).ConfigureAwait(false);
+
         {
             await TryWriteDiagnosticLineAsync(
-                $"Whisper runtime after WhisperFactory.FromPath: {RuntimeOptions.LoadedLibrary?.ToString() ?? WhisperFactory.GetRuntimeInfo()?.ToString() ?? "unknown"}.",
+                $"Whisper runtime after factory acquisition: {RuntimeOptions.LoadedLibrary?.ToString() ?? WhisperFactory.GetRuntimeInfo()?.ToString() ?? "unknown"}.",
                 request.EnableDiagnosticLogging,
                 cancellationToken).ConfigureAwait(false);
 
@@ -86,6 +95,21 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
                 ModelPath = request.ModelPath,
                 UsedRuntime = usedRuntime
             };
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_factorySync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _cachedFactory?.Factory.Dispose();
+            _cachedFactory = null;
         }
     }
 
@@ -132,6 +156,48 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         }
 
         return ChannelMixer.Mix(samples, channels, targetChannels: 1);
+    }
+
+    private WhisperFactory GetOrCreateFactory(TranscriptionRequest request, out bool cacheHit)
+    {
+        var cacheKey = BuildFactoryCacheKey(
+            request.ModelPath,
+            request.RuntimePreference,
+            request.OpenVinoRuntimePath);
+
+        lock (_factorySync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (_cachedFactory is not null &&
+                string.Equals(_cachedFactory.Key, cacheKey, StringComparison.OrdinalIgnoreCase))
+            {
+                cacheHit = true;
+                return _cachedFactory.Factory;
+            }
+
+            _cachedFactory?.Factory.Dispose();
+            _cachedFactory = new CachedFactory(cacheKey, WhisperFactory.FromPath(request.ModelPath));
+            cacheHit = false;
+            return _cachedFactory.Factory;
+        }
+    }
+
+    private static string BuildFactoryCacheKey(
+        string modelPath,
+        WhisperRuntimePreference runtimePreference,
+        string? openVinoRuntimePath)
+    {
+        var normalizedModelPath = Path.GetFullPath(modelPath);
+        var normalizedOpenVinoRuntimePath = string.IsNullOrWhiteSpace(openVinoRuntimePath)
+            ? string.Empty
+            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(openVinoRuntimePath));
+
+        return string.Join(
+            '|',
+            normalizedModelPath,
+            runtimePreference,
+            normalizedOpenVinoRuntimePath);
     }
 
     private static List<RuntimeLibrary> GetRuntimeOrder(WhisperRuntimePreference preference)
@@ -470,4 +536,5 @@ public sealed class WhisperTranscriptionService : ITranscriptionService
         return !string.IsNullOrWhiteSpace(weightsPath) && File.Exists(weightsPath);
     }
 
+    private sealed record CachedFactory(string Key, WhisperFactory Factory);
 }

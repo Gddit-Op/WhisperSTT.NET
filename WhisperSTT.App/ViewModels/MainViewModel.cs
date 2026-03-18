@@ -322,6 +322,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _fileTranscriptionTimer.Stop();
         _fileTranscriptionTimer.Tick -= OnFileTranscriptionTimerTick;
+        (_transcriptionService as IDisposable)?.Dispose();
+        (_audioRecorderService as IDisposable)?.Dispose();
         _audioPreviewService.Dispose();
     }
 

@@ -1,0 +1,157 @@
+• Ja, deutlich.
+
+  Die größten Hebel sehe ich hier:
+  - Modell nicht bei jeder Transkription neu laden. In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
+    WhisperTranscriptionService.cs:53 wird pro Request WhisperFactory.FromPath(...) gebaut und direkt wieder disposed.
+    Das ist wahrscheinlich der größte Latenzblock. Wenn du Modellpfad + Runtime gleich lässt, lohnt sich ein Cache für
+    WhisperFactory oder einen höher liegenden Model-Handle.
+  - Temp-Datei für Mikrofonaufnahmen ganz entfernen. Aktuell wird erst .wav aufgenommen und danach in /C:/Github/STT/
+    Whisper.NET/WhisperSTT.App/ViewModels/MainViewModel.cs:342 wieder von Platte gelesen und in /C:/Github/STT/
+    Whisper.NET/WhisperSTT.App/Services/WhisperTranscriptionService.cs:92 dekodiert. Für kurze Diktate ist das unnötiger
+    I/O plus zweiter Audio-Pass. Besser: Recorder per Callback in float[]/Ringbuffer sammeln und direkt an Whisper
+    geben.
+  - MiniAudioEngine im Transkriptionsservice wiederverwenden. In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
+    WhisperTranscriptionService.cs:94 wird pro Datei ein neues MiniAudioEngine erzeugt. Das ist kleiner als das
+    Modellproblem, aber leicht vermeidbar.
+
+  Mittleres Potential:
+  - Beim Dateilesen weniger Kopien erzeugen. In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
+    WhisperTranscriptionService.cs:105 wird in eine List<float> gelesen und danach per ToArray() nochmal kopiert. Wenn
+    decoder.Length verfügbar ist, kannst du vorallokieren oder direkt in gepoolte Arrays schreiben.
+  - Für reine Mikrofontranskription könntest du den Capture-Pfad auf nativer Samplerate aufnehmen und nur einmal offline
+    auf 16 kHz resamplen. Das ist eher Stabilität + Qualität als reine CPU-Ersparnis, aber oft der robustere Pfad.
+
+  Kleines Potential:
+  - Diagnostic Logging ist nicht der Hauptbottleneck. Das ist im aktuellen Code relativ harmlos.
+  - OnAudioProcessed im Recorder macht fast nichts Teures; dort liegt kein großer Gewinn.
+
+  Wenn du nur 2 Dinge machen willst, würde ich genau diese Reihenfolge nehmen:
+
+  1. WhisperFactory cachen
+  2. Mikrofonpfad ohne Temp-WAV direkt in Samples umstellen
+
+  Das sind die Änderungen mit dem besten Verhältnis aus Aufwand zu Wirkung. Wenn du willst, setze ich als Nächstes den
+  Factory-Cache ein.
+
+
+
+• Gemeint ist im Kern: Das Mikrofon soll erst in dem Format aufgenommen werden, das Gerät und Treiber am liebsten
+  liefern, und erst danach für Whisper auf 16 kHz/mono heruntergerechnet werden.
+
+  Was ihr heute macht
+
+  In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/SoundFlowRecorderService.cs:74 zwingt ihr das Capture-Gerät auf:
+
+  - SampleFormat.F32
+  - Channels = 1
+  - SampleRate = 16000
+
+  Das heißt: Schon beim Aufnehmen verlangt die App vom Audio-Stack direkt 16 kHz mono. Wenn das Mikrofon oder Windows
+  intern aber z. B. mit 48 kHz arbeitet, muss irgendwo in der Live-Capture-Kette sofort umgerechnet werden.
+
+  Warum das problematisch sein kann
+
+  Bei Echtzeit-Capture gelten harte Timing-Anforderungen:
+
+  - Das Gerät liefert permanent Audioblöcke.
+  - Der Treiber bzw. Audio-Backend muss diese Blöcke rechtzeitig konvertieren.
+  - Wenn Format, Samplerate oder Kanalzahl nicht nativ sind, passiert Resampling/Downmix live.
+
+  Dabei können Probleme entstehen:
+
+  - Knacksen/Störgeräusche bei ungünstigen Formatpfaden
+  - schlechtere Qualität durch Treiber-/Backend-Konvertierung
+  - instabile Gerätepfade, wenn 16 kHz mono nicht gut unterstützt wird
+  - mehr Risiko für Pufferprobleme, weil die Umrechnung im laufenden Stream passieren muss
+
+  Das ist besonders typisch bei Mikrofonen, die eigentlich auf 48 kHz optimiert sind. 16 kHz ist für Whisper passend,
+  aber oft nicht das native Aufnahmeformat des Geräts.
+
+  Was mit “native Samplerate aufnehmen” gemeint ist
+
+  Statt beim Capture direkt 16 kHz zu erzwingen, nimmst du in einem Format auf, das näher am Gerät ist, typischerweise:
+
+  - 48000 Hz
+  - oft F32
+  - mono oder stereo, je nachdem was stabil ist
+
+  Dann speicherst du diese Rohaufnahme erst einmal sauber weg. Erst nach dem Stop der Aufnahme, also außerhalb des
+  Echtzeitpfads, wandelst du sie für Whisper um:
+
+  1. Datei lesen
+  2. falls nötig auf mono mischen
+  3. auf 16000 Hz resamplen
+  4. float[] an Whisper geben
+
+  Genau diese Offline-Umwandlung macht ihr im Prinzip schon in /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
+  WhisperTranscriptionService.cs:92, nur dass aktuell bei Mikrofonaufnahmen meist schon 16 kHz geschrieben wird und
+  deshalb der Resample-Schritt dort oft entfällt.
+
+  Warum das robuster ist
+
+  Der entscheidende Unterschied ist: Die Umrechnung passiert nicht mehr im Live-Capture-Pfad, sondern nachgelagert.
+
+  Vorteile:
+  - keine Echtzeit-Deadline während des Resamplings
+  - weniger Abhängigkeit von Gerät/Treiber-Eigenheiten
+  - oft saubererer Ton
+  - weniger Risiko von Störgeräuschen durch nicht-native Formate
+
+  Anders gesagt:
+  live resampling while recording ist empfindlicher als offline resampling after recording.
+
+  Warum das nicht primär ein Performance-Thema ist
+
+  Das kostet nicht automatisch weniger CPU. Eher im Gegenteil:
+
+  - die Temp-Datei wird größer
+  - nach dem Stop muss einmal resampelt werden
+
+  Aber:
+  - die CPU-Last wandert aus dem kritischen Echtzeitpfad heraus
+  - dadurch wird das System oft stabiler
+  - “sauber und robust” ist hier wichtiger als “minimal weniger CPU”
+
+  Konkretes Beispiel
+  Angenommen, dein Mikrofon arbeitet intern auf 48 kHz.
+
+  Aktueller Pfad:
+  - Mikro liefert 48 kHz
+  - Audio-Backend muss live auf 16 kHz runter
+  - Recorder schreibt direkt 16 kHz wav
+
+  Robuster Pfad:
+  - Mikro liefert 48 kHz
+  - Recorder speichert 48 kHz wav
+  - nach Aufnahme: App resampled einmal sauber auf 16 kHz
+  - Whisper bekommt das Ergebnis
+
+  Der zweite Pfad ist meist fehlertoleranter.
+  Tradeoffs
+  Vorteile:
+  - weniger Störgeräusch-Risiko
+  - stabilerer Capture-Pfad
+  - besser kontrollierbare Audio-Konvertierung
+
+  Nachteile:
+  - größere Temp-Dateien
+  - etwas mehr Nachbearbeitungszeit nach Stop
+  - etwas mehr Implementierungsaufwand
+
+  Was das für euer Projekt konkret heißt
+  Wenn ihr Mikro-Störgeräusche beobachtet, würde ich testweise den Recorder ändern von:
+  - 16000 Hz mono F32
+
+  auf etwas wie:
+  - 48000 Hz F32
+  - mono, wenn stabil
+  - sonst stereo und später in /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/WhisperTranscriptionService.cs:127 auf
+    mono mischen
+
+  Dann übernimmt /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/WhisperTranscriptionService.cs:122 immer das
+  Resampling auf 16000 Hz.
+
+  Wenn du willst, kann ich dir als Nächstes genau diese Umstellung im Recorder einbauen, am sinnvollsten zuerst auf
+  48000 Hz F32 mono.
+
+

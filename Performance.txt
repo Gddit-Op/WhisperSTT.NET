@@ -2,15 +2,10 @@
 
   Die größten Hebel sehe ich hier: 
   - Temp-Datei für Mikrofonaufnahmen ganz entfernen. Aktuell wird erst .wav aufgenommen und danach in /C:/Github/STT/
-    Whisper.NET/WhisperSTT.App/ViewModels/MainViewModel.cs:342 wieder von Platte gelesen und in /C:/Github/STT/
-    Whisper.NET/WhisperSTT.App/Services/WhisperTranscriptionService.cs:92 dekodiert. Für kurze Diktate ist das unnötiger
+    Whisper.NET/WhisperSTT.App/ViewModels/MainViewModel.cs wieder von Platte gelesen und in /C:/Github/STT/
+    Whisper.NET/WhisperSTT.App/Services/WhisperTranscriptionService.cs dekodiert. Für kurze Diktate ist das unnötiger
     I/O plus zweiter Audio-Pass. Besser: Recorder per Callback in float[]/Ringbuffer sammeln und direkt an Whisper
     geben.
-
-  Mittleres Potential:
-  - Beim Dateilesen weniger Kopien erzeugen. In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
-    WhisperTranscriptionService.cs:105 wird in eine List<float> gelesen und danach per ToArray() nochmal kopiert. Wenn
-    decoder.Length verfügbar ist, kannst du vorallokieren oder direkt in gepoolte Arrays schreiben.
 
   Kleines Potential:
   - Diagnostic Logging ist nicht der Hauptbottleneck. Das ist im aktuellen Code relativ harmlos.

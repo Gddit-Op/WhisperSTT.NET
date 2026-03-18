@@ -129,23 +129,33 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
             throw new InvalidOperationException($"Unable to determine audio format for '{audioFilePath}'.");
         }
 
-        var readBuffer = new float[Math.Max(4096, sourceChannels * 4096)];
-        var samples = new List<float>(readBuffer.Length * 4);
+        var preferredChunkSize = Math.Max(4096, sourceChannels * 4096);
+        var samples = new float[GetInitialSampleCapacity(decoder.Length, sourceChannels, preferredChunkSize)];
+        var totalSamplesRead = 0;
+
         while (true)
         {
-            var samplesRead = decoder.Decode(readBuffer);
+            if (totalSamplesRead == samples.Length)
+            {
+                Array.Resize(ref samples, GetExpandedCapacity(samples.Length));
+            }
+
+            var samplesToRequest = Math.Min(preferredChunkSize, samples.Length - totalSamplesRead);
+            var samplesRead = decoder.Decode(samples.AsSpan(totalSamplesRead, samplesToRequest));
             if (samplesRead <= 0)
             {
                 break;
             }
 
-            for (var sampleIndex = 0; sampleIndex < samplesRead; sampleIndex++)
-            {
-                samples.Add(readBuffer[sampleIndex]);
-            }
+            totalSamplesRead += samplesRead;
         }
 
-        var monoSamples = NormalizeToMono(samples.ToArray(), sourceChannels);
+        if (totalSamplesRead != samples.Length)
+        {
+            Array.Resize(ref samples, totalSamplesRead);
+        }
+
+        var monoSamples = NormalizeToMono(samples, sourceChannels);
         return sourceSampleRate == 16000
             ? monoSamples
             : MathHelper.ResampleLinear(monoSamples, channels: 1, sourceRate: sourceSampleRate, targetRate: 16000);
@@ -159,6 +169,32 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
         }
 
         return ChannelMixer.Mix(samples, channels, targetChannels: 1);
+    }
+
+    private static int GetInitialSampleCapacity(int decoderLengthFrames, int sourceChannels, int fallbackChunkSize)
+    {
+        if (decoderLengthFrames <= 0 || sourceChannels <= 0)
+        {
+            return fallbackChunkSize;
+        }
+
+        var estimatedSamples = (long)decoderLengthFrames * sourceChannels;
+        if (estimatedSamples <= 0)
+        {
+            return fallbackChunkSize;
+        }
+
+        return (int)Math.Clamp(estimatedSamples, fallbackChunkSize, int.MaxValue);
+    }
+
+    private static int GetExpandedCapacity(int currentCapacity)
+    {
+        if (currentCapacity >= int.MaxValue / 2)
+        {
+            return int.MaxValue;
+        }
+
+        return Math.Max(currentCapacity * 2, currentCapacity + 4096);
     }
 
     private WhisperFactory GetOrCreateFactory(TranscriptionRequest request, out bool cacheHit)

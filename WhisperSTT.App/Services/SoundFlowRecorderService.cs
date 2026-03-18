@@ -71,13 +71,7 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
         var recordingStoppedSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var deviceNumber = ResolveDeviceNumber(settings.PreferredInputDeviceNumber, captureDevices.Length);
         var deviceInfo = captureDevices[deviceNumber];
-        var audioFormat = new AudioFormat
-        {
-            Format = SampleFormat.F32,
-            Channels = 1,
-            Layout = AudioFormat.GetLayoutFromChannels(1),
-            SampleRate = 16000
-        };
+        var audioFormat = ResolveCaptureFormat(deviceInfo);
 
         var captureDevice = _audioEngine.InitializeCaptureDevice(deviceInfo, audioFormat, null);
         var recorder = new Recorder(captureDevice, currentFilePath, "wav");
@@ -393,6 +387,90 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
         }
 
         return 0;
+    }
+
+    private static AudioFormat ResolveCaptureFormat(DeviceInfo deviceInfo)
+    {
+        var supportedFormats = deviceInfo.SupportedDataFormats;
+        if (supportedFormats is not null && supportedFormats.Length > 0)
+        {
+            var bestFormat = supportedFormats[0];
+            var bestScore = ScoreNativeFormat(bestFormat);
+            for (var formatIndex = 1; formatIndex < supportedFormats.Length; formatIndex++)
+            {
+                var candidate = supportedFormats[formatIndex];
+                var candidateScore = ScoreNativeFormat(candidate);
+                if (candidateScore > bestScore)
+                {
+                    bestFormat = candidate;
+                    bestScore = candidateScore;
+                }
+            }
+
+            if (bestFormat.SampleRate > 0 &&
+                bestFormat.Channels > 0 &&
+                bestFormat.Format != SampleFormat.Unknown)
+            {
+                var channels = checked((int)bestFormat.Channels);
+                var sampleRate = checked((int)bestFormat.SampleRate);
+                return new AudioFormat
+                {
+                    Format = bestFormat.Format,
+                    Channels = channels,
+                    Layout = AudioFormat.GetLayoutFromChannels(channels),
+                    SampleRate = sampleRate
+                };
+            }
+        }
+
+        return new AudioFormat
+        {
+            Format = SampleFormat.F32,
+            Channels = 1,
+            Layout = AudioFormat.GetLayoutFromChannels(1),
+            SampleRate = 48000
+        };
+    }
+
+    private static int ScoreNativeFormat(NativeDataFormat format)
+    {
+        if (format.SampleRate <= 0 || format.Channels <= 0 || format.Format == SampleFormat.Unknown)
+        {
+            return int.MinValue;
+        }
+
+        var channels = checked((int)format.Channels);
+        var sampleRate = checked((int)format.SampleRate);
+
+        var formatScore = format.Format switch
+        {
+            SampleFormat.F32 => 400000,
+            SampleFormat.S32 => 300000,
+            SampleFormat.S24 => 250000,
+            SampleFormat.S16 => 200000,
+            SampleFormat.U8 => 100000,
+            _ => 0
+        };
+
+        var channelScore = channels switch
+        {
+            1 => 40000,
+            2 => 30000,
+            _ => Math.Max(0, 20000 - (channels * 1000))
+        };
+
+        var sampleRateScore = sampleRate switch
+        {
+            48000 => 10000,
+            44100 => 9000,
+            32000 => 8000,
+            24000 => 7000,
+            16000 => 6000,
+            _ when sampleRate > 0 => Math.Min(sampleRate / 10, 5000),
+            _ => 0
+        };
+
+        return formatScore + channelScore + sampleRateScore;
     }
 
     private static float ComputeAverageAmplitude(ReadOnlySpan<float> samples)

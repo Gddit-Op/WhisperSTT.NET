@@ -55,6 +55,7 @@ public partial class App : Avalonia.Application
             var audioPreviewService = new MediaPlayerAudioPreviewService();
 
             _viewModel = new MainViewModel(
+                paths,
                 settings,
                 settingsStore,
                 logger,

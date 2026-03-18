@@ -13,6 +13,7 @@ namespace WhisperSTT.App.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
+    private readonly ApplicationPaths _paths;
     private readonly ISettingsStore _settingsStore;
     private readonly IActivityLogService _activityLogService;
     private readonly ITranscriptHistoryService _historyService;
@@ -37,6 +38,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private AudioInputDeviceOption? _selectedInputDevice;
 
     public MainViewModel(
+        ApplicationPaths paths,
         AppSettings settings,
         ISettingsStore settingsStore,
         IActivityLogService activityLogService,
@@ -49,6 +51,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IFilePickerService filePickerService,
         IAudioPreviewService audioPreviewService)
     {
+        _paths = paths;
         Settings = settings;
         _settingsStore = settingsStore;
         _activityLogService = activityLogService;
@@ -74,6 +77,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         BrowseOpenVinoRuntimePathCommand = new AsyncRelayCommand(BrowseOpenVinoRuntimePathAsync);
         TranscribeFileCommand = new AsyncRelayCommand(TranscribeSelectedFileAsync, CanTranscribeFile);
         DownloadModelCommand = new AsyncRelayCommand(DownloadSelectedModelAsync, () => Status != AppStatus.Recording);
+        DeleteTempAudioFilesCommand = new AsyncRelayCommand(DeleteTempAudioFilesAsync, () => Status != AppStatus.Recording && !_audioRecorderService.IsRecording);
         CopyLatestTranscriptCommand = new AsyncRelayCommand(CopyLatestTranscriptAsync, CanCopyLatestTranscript);
         PlayPreviewCommand = new RelayCommand(PlayPreview, CanPreviewFile);
         PausePreviewCommand = new RelayCommand(PausePreview, () => _audioPreviewService.IsLoaded);
@@ -107,6 +111,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand TranscribeFileCommand { get; }
 
     public AsyncRelayCommand DownloadModelCommand { get; }
+
+    public AsyncRelayCommand DeleteTempAudioFilesCommand { get; }
 
     public AsyncRelayCommand CopyLatestTranscriptCommand { get; }
 
@@ -258,7 +264,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public string PersistenceSummary =>
-        $"Config: {_settingsStore.ConfigPath}{Environment.NewLine}History: {_historyService.HistoryPath}{Environment.NewLine}Log: {_activityLogService.LogPath}";
+        $"Config: {_settingsStore.ConfigPath}{Environment.NewLine}History: {_historyService.HistoryPath}{Environment.NewLine}Log: {_activityLogService.LogPath}{Environment.NewLine}Temp: {_paths.TempDirectory}";
 
     public async Task ToggleRecordingAsync()
     {
@@ -313,6 +319,37 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public async Task DeleteTempAudioFilesAsync()
+    {
+        try
+        {
+            _paths.EnsureCreated();
+
+            var deletedFiles = 0;
+            long deletedBytes = 0;
+            foreach (var filePath in Directory.EnumerateFiles(_paths.TempDirectory, "*.wav", SearchOption.TopDirectoryOnly))
+            {
+                var fileInfo = new FileInfo(filePath);
+                if (fileInfo.Exists)
+                {
+                    deletedBytes += fileInfo.Length;
+                }
+
+                File.Delete(filePath);
+                deletedFiles++;
+            }
+
+            LastError = deletedFiles == 0
+                ? "No temp WAV files found."
+                : $"Deleted {deletedFiles} temp WAV file(s), freed {FormatFileSize(deletedBytes)}.";
+            await LogAsync($"Deleted {deletedFiles} temp WAV file(s) from {_paths.TempDirectory}.").ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            await HandleExceptionAsync(exception).ConfigureAwait(true);
+        }
+    }
+
     public void NotifyHotkeyValuesChanged()
     {
         OnPropertyChanged(nameof(Settings));
@@ -353,10 +390,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         SetStatus(AppStatus.Transcribing, "Transcribing microphone input");
+        var transcriptionStopwatch = Stopwatch.StartNew();
         var result = await TranscribeAsync(
             audioPath,
             Settings.Transcription.RecordingModelPreset,
             Settings.Transcription.RecordingThreadCount).ConfigureAwait(true);
+        transcriptionStopwatch.Stop();
 
         CurrentTranscript = result.Text;
         UpdateDetectedLanguage(result.DetectedLanguage);
@@ -370,6 +409,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         }
 
+        await LogAsync($"Microphone transcription completed in {transcriptionStopwatch.Elapsed.TotalMilliseconds:F0} ms.").ConfigureAwait(true);
         SetStatus(AppStatus.Idle, "Idle");
         PlayFeedbackSound(SystemSounds.Exclamation);
     }
@@ -657,6 +697,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SaveSettingsCommand.NotifyCanExecuteChanged();
         TranscribeFileCommand.NotifyCanExecuteChanged();
         DownloadModelCommand.NotifyCanExecuteChanged();
+        DeleteTempAudioFilesCommand.NotifyCanExecuteChanged();
         CopyLatestTranscriptCommand.NotifyCanExecuteChanged();
         PlayPreviewCommand.NotifyCanExecuteChanged();
         PausePreviewCommand.NotifyCanExecuteChanged();
@@ -693,6 +734,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _fileTranscriptionTimer.Stop();
         FileTranscriptionElapsedText = $"Transcription time: {FormatElapsed(_fileTranscriptionStopwatch.Elapsed)}";
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        const long kib = 1024;
+        const long mib = 1024 * 1024;
+
+        return bytes switch
+        {
+            >= mib => $"{bytes / (double)mib:F1} MiB",
+            >= kib => $"{bytes / (double)kib:F1} KiB",
+            _ => $"{bytes} B"
+        };
     }
 
     private void ResetFileTranscriptionTiming()

@@ -13,6 +13,7 @@ internal static class DesignTimeViewModelFactory
         var logger = new FileActivityLogService(paths);
 
         return new MainViewModel(
+            paths,
             settings,
             new JsonSettingsStore(paths),
             logger,

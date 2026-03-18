@@ -369,6 +369,9 @@
                           Content="Download Selected Model"
                           Foreground="White" />
                   <Button Margin="0,12,0,0"
+                          Command="{Binding DeleteTempAudioFilesCommand}"
+                          Content="Delete Temp WAV Files" />
+                  <Button Margin="0,12,0,0"
                           Command="{Binding SaveSettingsCommand}"
                           Content="Save Settings" />
                 </StackPanel>

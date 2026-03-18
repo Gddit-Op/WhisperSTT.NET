@@ -1,25 +1,16 @@
 • Ja, deutlich.
 
-  Die größten Hebel sehe ich hier:
-  - Modell nicht bei jeder Transkription neu laden. In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
-    WhisperTranscriptionService.cs:53 wird pro Request WhisperFactory.FromPath(...) gebaut und direkt wieder disposed.
-    Das ist wahrscheinlich der größte Latenzblock. Wenn du Modellpfad + Runtime gleich lässt, lohnt sich ein Cache für
-    WhisperFactory oder einen höher liegenden Model-Handle.
+  Die größten Hebel sehe ich hier: 
   - Temp-Datei für Mikrofonaufnahmen ganz entfernen. Aktuell wird erst .wav aufgenommen und danach in /C:/Github/STT/
     Whisper.NET/WhisperSTT.App/ViewModels/MainViewModel.cs:342 wieder von Platte gelesen und in /C:/Github/STT/
     Whisper.NET/WhisperSTT.App/Services/WhisperTranscriptionService.cs:92 dekodiert. Für kurze Diktate ist das unnötiger
     I/O plus zweiter Audio-Pass. Besser: Recorder per Callback in float[]/Ringbuffer sammeln und direkt an Whisper
     geben.
-  - MiniAudioEngine im Transkriptionsservice wiederverwenden. In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
-    WhisperTranscriptionService.cs:94 wird pro Datei ein neues MiniAudioEngine erzeugt. Das ist kleiner als das
-    Modellproblem, aber leicht vermeidbar.
 
   Mittleres Potential:
   - Beim Dateilesen weniger Kopien erzeugen. In /C:/Github/STT/Whisper.NET/WhisperSTT.App/Services/
     WhisperTranscriptionService.cs:105 wird in eine List<float> gelesen und danach per ToArray() nochmal kopiert. Wenn
     decoder.Length verfügbar ist, kannst du vorallokieren oder direkt in gepoolte Arrays schreiben.
-  - Für reine Mikrofontranskription könntest du den Capture-Pfad auf nativer Samplerate aufnehmen und nur einmal offline
-    auf 16 kHz resamplen. Das ist eher Stabilität + Qualität als reine CPU-Ersparnis, aber oft der robustere Pfad.
 
   Kleines Potential:
   - Diagnostic Logging ist nicht der Hauptbottleneck. Das ist im aktuellen Code relativ harmlos.

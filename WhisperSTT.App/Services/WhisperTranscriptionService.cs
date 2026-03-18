@@ -16,12 +16,14 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
 {
     private readonly object _factorySync = new();
     private readonly IActivityLogService? _activityLogService;
+    private readonly MiniAudioEngine _audioEngine;
     private CachedFactory? _cachedFactory;
     private bool _disposed;
 
     public WhisperTranscriptionService(IActivityLogService? activityLogService = null)
     {
         _activityLogService = activityLogService;
+        _audioEngine = new MiniAudioEngine(Array.Empty<MiniAudioBackend>());
     }
 
     public async Task<TranscriptionResult> TranscribeAsync(
@@ -111,13 +113,14 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
             _cachedFactory?.Factory.Dispose();
             _cachedFactory = null;
         }
+
+        _audioEngine.Dispose();
     }
 
-    private static float[] LoadWhisperInputSamples(string audioFilePath)
+    private float[] LoadWhisperInputSamples(string audioFilePath)
     {
-        using var audioEngine = new MiniAudioEngine(Array.Empty<MiniAudioBackend>());
         using var inputStream = File.OpenRead(audioFilePath);
-        using var decoder = audioEngine.CreateDecoder(inputStream, out var detectedFormat, hintFormat: null);
+        using var decoder = _audioEngine.CreateDecoder(inputStream, out var detectedFormat, hintFormat: null);
 
         var sourceChannels = decoder.Channels > 0 ? decoder.Channels : detectedFormat.Channels;
         var sourceSampleRate = decoder.SampleRate > 0 ? decoder.SampleRate : detectedFormat.SampleRate;

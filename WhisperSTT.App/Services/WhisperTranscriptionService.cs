@@ -33,9 +33,15 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
         cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (!File.Exists(request.AudioFilePath))
+        var hasInMemoryAudio = request.AudioSamples is { Length: > 0 };
+        if (!hasInMemoryAudio && !File.Exists(request.AudioFilePath))
         {
             throw new FileNotFoundException("Audio file not found.", request.AudioFilePath);
+        }
+
+        if (hasInMemoryAudio && (request.AudioSampleRate <= 0 || request.AudioChannels <= 0))
+        {
+            throw new InvalidOperationException("In-memory audio capture is missing sample rate or channel information.");
         }
 
         if (!File.Exists(request.ModelPath))
@@ -43,7 +49,9 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
             throw new FileNotFoundException("Whisper model file not found.", request.ModelPath);
         }
 
-        var waveSamples = LoadWhisperInputSamples(request.AudioFilePath);
+        var waveSamples = hasInMemoryAudio
+            ? PrepareWhisperInputSamples(request.AudioSamples!, request.AudioSampleRate, request.AudioChannels)
+            : LoadWhisperInputSamples(request.AudioFilePath);
         RuntimeOptions.LibraryPath = Path.Combine(AppContext.BaseDirectory, "runtimes");
         var runtimeOrder = GetRuntimeOrder(request.RuntimePreference);
         RuntimeOptions.RuntimeLibraryOrder = runtimeOrder;
@@ -171,6 +179,19 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
         return ChannelMixer.Mix(samples, channels, targetChannels: 1);
     }
 
+    private static float[] PrepareWhisperInputSamples(float[] samples, int sourceSampleRate, int sourceChannels)
+    {
+        if (sourceSampleRate <= 0 || sourceChannels <= 0)
+        {
+            throw new InvalidOperationException("Unable to normalize in-memory audio samples due to invalid source format.");
+        }
+
+        var monoSamples = NormalizeToMono(samples, sourceChannels);
+        return sourceSampleRate == 16000
+            ? monoSamples
+            : MathHelper.ResampleLinear(monoSamples, channels: 1, sourceRate: sourceSampleRate, targetRate: 16000);
+    }
+
     private static int GetInitialSampleCapacity(int decoderLengthFrames, int sourceChannels, int fallbackChunkSize)
     {
         if (decoderLengthFrames <= 0 || sourceChannels <= 0)
@@ -285,6 +306,7 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
 
         var runtimeLibraryPath = RuntimeOptions.LibraryPath ?? string.Empty;
         var runtimeIdentifier = GetRuntimeIdentifier();
+        var hasInMemoryAudio = request.AudioSamples is { Length: > 0 };
         var lines = new List<string>
         {
             $"Whisper diagnostics: base directory = {AppContext.BaseDirectory}",
@@ -302,8 +324,11 @@ public sealed class WhisperTranscriptionService : ITranscriptionService, IDispos
             $"Whisper diagnostics: OpenVINO encoder xml path = {openVinoEncoderPath ?? "<auto>"}",
             $"Whisper diagnostics: OpenVINO encoder xml exists = {!string.IsNullOrWhiteSpace(openVinoEncoderPath) && File.Exists(openVinoEncoderPath)}",
             $"Whisper diagnostics: OpenVINO encoder bin exists = {HasOpenVinoWeights(openVinoEncoderPath)}",
-            $"Whisper diagnostics: audio path = {request.AudioFilePath}",
-            $"Whisper diagnostics: audio file exists = {File.Exists(request.AudioFilePath)}",
+            $"Whisper diagnostics: audio path = {(hasInMemoryAudio ? "<memory>" : request.AudioFilePath)}",
+            $"Whisper diagnostics: audio file exists = {!hasInMemoryAudio && File.Exists(request.AudioFilePath)}",
+            $"Whisper diagnostics: audio samples provided in memory = {hasInMemoryAudio}",
+            $"Whisper diagnostics: in-memory sample rate = {request.AudioSampleRate}",
+            $"Whisper diagnostics: in-memory channels = {request.AudioChannels}",
             $"Whisper diagnostics: loaded runtime before WhisperFactory.FromPath = {RuntimeOptions.LoadedLibrary?.ToString() ?? "null"}"
         };
 

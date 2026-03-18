@@ -27,6 +27,8 @@ public sealed class AudioSettings
     public bool EnableFeedbackSounds { get; set; } = true;
 
     public bool EnableLivePreview { get; set; }
+
+    public bool TranscribeMicrophoneDirectlyFromMemory { get; set; }
 }
 
 public sealed class TranscriptionSettings

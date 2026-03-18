@@ -380,8 +380,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task StopRecordingAndTranscribeAsync()
     {
-        var audioPath = await _audioRecorderService.StopRecordingAsync().ConfigureAwait(true);
-        if (string.IsNullOrWhiteSpace(audioPath))
+        var recordedAudio = await _audioRecorderService.StopRecordingAsync().ConfigureAwait(true);
+        if (recordedAudio is null || !recordedAudio.HasAudio)
         {
             SetStatus(AppStatus.Idle, "Idle");
             LastError = "No microphone audio data was captured. Check the selected input device and Windows microphone access.";
@@ -392,7 +392,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SetStatus(AppStatus.Transcribing, "Transcribing microphone input");
         var transcriptionStopwatch = Stopwatch.StartNew();
         var result = await TranscribeAsync(
-            audioPath,
+            recordedAudio,
             Settings.Transcription.RecordingModelPreset,
             Settings.Transcription.RecordingThreadCount).ConfigureAwait(true);
         transcriptionStopwatch.Stop();
@@ -414,7 +414,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PlayFeedbackSound(SystemSounds.Exclamation);
     }
 
-    private async Task<TranscriptionResult> TranscribeAsync(string audioPath, ModelPreset preset, int threadCount)
+    private async Task<TranscriptionResult> TranscribeAsync(RecordedAudioCapture audioCapture, ModelPreset preset, int threadCount)
     {
         var modelPath = _modelManagementService.ResolveModelPath(Settings, preset);
         if (!File.Exists(modelPath))
@@ -425,14 +425,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         var result = await _transcriptionService.TranscribeAsync(new TranscriptionRequest(
-            audioPath,
+            audioCapture.AudioFilePath ?? string.Empty,
             modelPath,
             Settings.Transcription.LanguageMode,
             Math.Max(1, threadCount),
             Settings.Transcription.RuntimePreference,
             OpenVinoRuntimePath,
             Settings.Audio.EnableLivePreview,
-            Settings.Logging.EnableLogging)).ConfigureAwait(true);
+            Settings.Logging.EnableLogging,
+            audioCapture.AudioSamples,
+            audioCapture.SampleRate,
+            audioCapture.Channels)).ConfigureAwait(true);
+
+        var audioSourceDescription = audioCapture.AudioSamples is { Length: > 0 }
+            ? $"microphone memory buffer ({audioCapture.SampleRate} Hz, {audioCapture.Channels} ch)"
+            : audioCapture.AudioFilePath ?? "<unknown>";
 
         var detectedLanguageText = string.IsNullOrWhiteSpace(result.DetectedLanguage)
             ? "unknown"
@@ -443,8 +450,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         await LogAsync($"Configured runtime: {Settings.Transcription.RuntimePreference}.").ConfigureAwait(true);
         await LogAsync($"Used runtime: {usedRuntimeText}.").ConfigureAwait(true);
         await LogAsync($"Detected language: {detectedLanguageText}.").ConfigureAwait(true);
-        await LogAsync($"Transcription completed with model {modelPath}.").ConfigureAwait(true);
+        await LogAsync($"Transcription completed with model {modelPath}; audio source = {audioSourceDescription}.").ConfigureAwait(true);
         return result;
+    }
+
+    private Task<TranscriptionResult> TranscribeAsync(string audioPath, ModelPreset preset, int threadCount)
+    {
+        return TranscribeAsync(
+            new RecordedAudioCapture(
+                AudioFilePath: audioPath,
+                AudioSamples: null,
+                SampleRate: 0,
+                Channels: 0),
+            preset,
+            threadCount);
     }
 
     private async Task BrowseFileAsync()

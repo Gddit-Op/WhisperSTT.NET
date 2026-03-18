@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO;
 using SoundFlow.Abstracts;
 using SoundFlow.Abstracts.Devices;
@@ -20,14 +21,18 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
     private readonly AudioEngine _audioEngine;
     private AudioCaptureDevice? _captureDevice;
     private Recorder? _recorder;
-    private TaskCompletionSource<string>? _recordingStoppedSource;
+    private TaskCompletionSource<RecordedAudioCapture?>? _recordingStoppedSource;
+    private ArrayBufferWriter<float>? _recordedSamples;
     private string? _currentFilePath;
+    private bool _recordToMemory;
     private bool _discardOnStop;
     private long _recordedSampleCount;
     private Exception? _lastRecordingException;
     private bool _lastRecordingEndedWithoutData;
     private bool _firstDataAvailableLogged;
     private int _currentDeviceNumber = -1;
+    private int _currentSampleRate;
+    private int _currentChannels;
     private string _currentDeviceName = string.Empty;
 
     public SoundFlowRecorderService(ApplicationPaths paths, IActivityLogService? activityLogService = null)
@@ -64,42 +69,55 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
             throw new InvalidOperationException("No microphone input device is available.");
         }
 
-        var currentFilePath = Path.Combine(
-            _paths.TempDirectory,
-            $"recording-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.wav");
+        var recordToMemory = settings.TranscribeMicrophoneDirectlyFromMemory;
+        var currentFilePath = recordToMemory
+            ? null
+            : Path.Combine(
+                _paths.TempDirectory,
+                $"recording-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.wav");
 
-        var recordingStoppedSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recordingStoppedSource = new TaskCompletionSource<RecordedAudioCapture?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var deviceNumber = ResolveDeviceNumber(settings.PreferredInputDeviceNumber, captureDevices.Length);
         var deviceInfo = captureDevices[deviceNumber];
         var audioFormat = ResolveCaptureFormat(deviceInfo);
 
         var captureDevice = _audioEngine.InitializeCaptureDevice(deviceInfo, audioFormat, null);
-        var recorder = new Recorder(captureDevice, currentFilePath, "wav");
-        var startResult = recorder.StartRecording();
-        if (startResult.IsFailure)
+        Recorder? recorder = null;
+        if (!recordToMemory)
         {
-            recorder.Dispose();
-            captureDevice.Dispose();
-            throw CreateRecorderException("SoundFlow recorder initialization failed.", startResult);
+            recorder = new Recorder(captureDevice, currentFilePath!, "wav");
+            var startResult = recorder.StartRecording();
+            if (startResult.IsFailure)
+            {
+                recorder.Dispose();
+                captureDevice.Dispose();
+                throw CreateRecorderException("SoundFlow recorder initialization failed.", startResult);
+            }
         }
 
         lock (_syncRoot)
         {
             _currentFilePath = currentFilePath;
             _recordingStoppedSource = recordingStoppedSource;
+            _recordToMemory = recordToMemory;
             _discardOnStop = false;
             _recordedSampleCount = 0;
+            _recordedSamples = recordToMemory
+                ? new ArrayBufferWriter<float>(Math.Max(audioFormat.SampleRate * audioFormat.Channels * 10, 16384))
+                : null;
             _lastRecordingException = null;
             _lastRecordingEndedWithoutData = false;
             _firstDataAvailableLogged = false;
             _currentDeviceNumber = deviceNumber;
+            _currentSampleRate = audioFormat.SampleRate;
+            _currentChannels = audioFormat.Channels;
             _currentDeviceName = string.IsNullOrWhiteSpace(deviceInfo.Name) ? $"Input device {deviceNumber}" : deviceInfo.Name;
             _captureDevice = captureDevice;
             _recorder = recorder;
         }
 
         TryWriteDiagnosticLine(
-            $"Recorder diagnostics: starting SoundFlow capture on device {_currentDeviceNumber} ({_currentDeviceName}); format={audioFormat.SampleRate}Hz/{audioFormat.Format}/{audioFormat.Channels}ch; output={currentFilePath}");
+            $"Recorder diagnostics: starting SoundFlow capture on device {_currentDeviceNumber} ({_currentDeviceName}); format={audioFormat.SampleRate}Hz/{audioFormat.Format}/{audioFormat.Channels}ch; output={(recordToMemory ? "<memory>" : currentFilePath)}; directMemory={recordToMemory}.");
 
         try
         {
@@ -117,9 +135,9 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
         return Task.CompletedTask;
     }
 
-    public async Task<string> StopRecordingAsync(CancellationToken cancellationToken = default)
+    public async Task<RecordedAudioCapture?> StopRecordingAsync(CancellationToken cancellationToken = default)
     {
-        Task<string>? completionTask;
+        Task<RecordedAudioCapture?>? completionTask;
 
         lock (_syncRoot)
         {
@@ -135,10 +153,10 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
                 if (_lastRecordingEndedWithoutData)
                 {
                     _lastRecordingEndedWithoutData = false;
-                    return string.Empty;
+                    return null;
                 }
 
-                return string.Empty;
+                return null;
             }
 
             _discardOnStop = false;
@@ -151,7 +169,7 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
 
     public async Task CancelRecordingAsync(CancellationToken cancellationToken = default)
     {
-        Task<string>? completionTask;
+        Task<RecordedAudioCapture?>? completionTask;
 
         lock (_syncRoot)
         {
@@ -178,11 +196,15 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
     {
         AudioCaptureDevice? captureDevice;
         Recorder? recorder;
-        TaskCompletionSource<string>? recordingStoppedSource;
+        TaskCompletionSource<RecordedAudioCapture?>? recordingStoppedSource;
+        ArrayBufferWriter<float>? recordedSamples;
         string currentFilePath;
+        bool recordToMemory;
         bool discardOnStop;
         long recordedSampleCount;
         Exception? recordingException;
+        int currentSampleRate;
+        int currentChannels;
 
         lock (_syncRoot)
         {
@@ -190,13 +212,21 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
             _captureDevice = null;
             recorder = _recorder;
             _recorder = null;
+            recordedSamples = _recordedSamples;
+            _recordedSamples = null;
             recordingStoppedSource = _recordingStoppedSource;
             _recordingStoppedSource = null;
             currentFilePath = _currentFilePath ?? string.Empty;
             _currentFilePath = null;
+            recordToMemory = _recordToMemory;
+            _recordToMemory = false;
             discardOnStop = _discardOnStop;
             recordedSampleCount = _recordedSampleCount;
             _recordedSampleCount = 0;
+            currentSampleRate = _currentSampleRate;
+            _currentSampleRate = 0;
+            currentChannels = _currentChannels;
+            _currentChannels = 0;
             recordingException = _lastRecordingException;
             _lastRecordingException = null;
             _lastRecordingEndedWithoutData = false;
@@ -238,7 +268,7 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
             : 0L;
 
         TryWriteDiagnosticLine(
-            $"Recorder diagnostics: SoundFlow stop exception={(recordingException is null ? "null" : $"{recordingException.GetType().Name}: {recordingException.Message}")}; recordedSamples={recordedSampleCount}; fileBytes={recordedFileLength}; discardOnStop={discardOnStop}; file={currentFilePath}; fileExists={File.Exists(currentFilePath)}.");
+            $"Recorder diagnostics: SoundFlow stop exception={(recordingException is null ? "null" : $"{recordingException.GetType().Name}: {recordingException.Message}")}; recordedSamples={recordedSampleCount}; fileBytes={recordedFileLength}; discardOnStop={discardOnStop}; file={currentFilePath}; fileExists={File.Exists(currentFilePath)}; directMemory={recordToMemory}; sampleRate={currentSampleRate}; channels={currentChannels}.");
 
         if (recordingException is not null)
         {
@@ -258,7 +288,28 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
                 File.Delete(currentFilePath);
             }
 
-            recordingStoppedSource?.TrySetResult(string.Empty);
+            recordingStoppedSource?.TrySetResult(null);
+            return;
+        }
+
+        if (recordToMemory)
+        {
+            if (recordedSampleCount <= 0 || recordedSamples is null || recordedSamples.WrittenCount <= 0)
+            {
+                lock (_syncRoot)
+                {
+                    _lastRecordingEndedWithoutData = true;
+                }
+
+                recordingStoppedSource?.TrySetResult(null);
+                return;
+            }
+
+            recordingStoppedSource?.TrySetResult(new RecordedAudioCapture(
+                AudioFilePath: null,
+                AudioSamples: recordedSamples.WrittenMemory.ToArray(),
+                SampleRate: currentSampleRate,
+                Channels: currentChannels));
             return;
         }
 
@@ -274,11 +325,15 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
                 _lastRecordingEndedWithoutData = true;
             }
 
-            recordingStoppedSource?.TrySetResult(string.Empty);
+            recordingStoppedSource?.TrySetResult(null);
             return;
         }
 
-        recordingStoppedSource?.TrySetResult(currentFilePath);
+        recordingStoppedSource?.TrySetResult(new RecordedAudioCapture(
+            AudioFilePath: currentFilePath,
+            AudioSamples: null,
+            SampleRate: currentSampleRate,
+            Channels: currentChannels));
     }
 
     private void OnAudioProcessed(Span<float> samples, Capability capability)
@@ -289,14 +344,30 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
         }
 
         Recorder? recorder;
+        ArrayBufferWriter<float>? recordedSamples;
+        bool recordToMemory;
         lock (_syncRoot)
         {
             recorder = _recorder;
+            recordedSamples = _recordedSamples;
+            recordToMemory = _recordToMemory;
         }
 
-        if (recorder is null)
+        if (recorder is null && !recordToMemory)
         {
             return;
+        }
+
+        if (recordToMemory && recordedSamples is not null)
+        {
+            lock (_syncRoot)
+            {
+                if (_recordedSamples is not null)
+                {
+                    samples.CopyTo(_recordedSamples.GetSpan(samples.Length));
+                    _recordedSamples.Advance(samples.Length);
+                }
+            }
         }
 
         var totalSamples = Interlocked.Add(ref _recordedSampleCount, samples.Length);
@@ -332,10 +403,14 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
             _captureDevice = null;
             recorder = _recorder;
             _recorder = null;
+            _recordedSamples = null;
             _recordingStoppedSource = null;
             _currentFilePath = null;
+            _recordToMemory = false;
             _discardOnStop = false;
             _recordedSampleCount = 0;
+            _currentSampleRate = 0;
+            _currentChannels = 0;
             _lastRecordingException = null;
             _lastRecordingEndedWithoutData = false;
             _firstDataAvailableLogged = false;

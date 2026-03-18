@@ -1,5 +1,16 @@
 namespace WhisperSTT.Core.Models;
 
+public sealed record RecordedAudioCapture(
+    string? AudioFilePath,
+    float[]? AudioSamples,
+    int SampleRate,
+    int Channels)
+{
+    public bool HasAudio =>
+        (!string.IsNullOrWhiteSpace(AudioFilePath)) ||
+        (AudioSamples is { Length: > 0 });
+}
+
 public sealed record TranscriptionRequest(
     string AudioFilePath,
     string ModelPath,
@@ -8,7 +19,10 @@ public sealed record TranscriptionRequest(
     WhisperRuntimePreference RuntimePreference,
     string OpenVinoRuntimePath = "",
     bool IsLivePreview = false,
-    bool EnableDiagnosticLogging = false);
+    bool EnableDiagnosticLogging = false,
+    float[]? AudioSamples = null,
+    int AudioSampleRate = 0,
+    int AudioChannels = 0);
 
 public sealed record TranscriptionSegment(TimeSpan Start, TimeSpan End, string Text);
 

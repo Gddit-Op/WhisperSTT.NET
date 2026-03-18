@@ -330,6 +330,9 @@
                             Content="Enable near-realtime live preview placeholder"
                             IsChecked="{Binding Settings.Audio.EnableLivePreview}" />
                   <CheckBox Margin="0,8,0,0"
+                            Content="Transcribe microphone directly from memory (no temp WAV)"
+                            IsChecked="{Binding Settings.Audio.TranscribeMicrophoneDirectlyFromMemory}" />
+                  <CheckBox Margin="0,8,0,0"
                             Content="Restore clipboard after paste"
                             IsChecked="{Binding Settings.Paste.RestoreClipboardAfterPaste}" />
                 </StackPanel>

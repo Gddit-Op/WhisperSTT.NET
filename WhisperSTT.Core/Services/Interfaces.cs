@@ -24,7 +24,7 @@ public interface IAudioRecorderService
 
     Task StartRecordingAsync(AudioSettings settings, CancellationToken cancellationToken = default);
 
-    Task<string> StopRecordingAsync(CancellationToken cancellationToken = default);
+    Task<RecordedAudioCapture?> StopRecordingAsync(CancellationToken cancellationToken = default);
 
     Task CancelRecordingAsync(CancellationToken cancellationToken = default);
 }

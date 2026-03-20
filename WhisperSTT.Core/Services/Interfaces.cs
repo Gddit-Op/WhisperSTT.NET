@@ -50,6 +50,8 @@ public interface IFilePickerService
 {
     Task<string?> PickAudioFileAsync(CancellationToken cancellationToken = default);
 
+    Task<string?> PickModelFileAsync(CancellationToken cancellationToken = default);
+
     Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken = default);
 }
 

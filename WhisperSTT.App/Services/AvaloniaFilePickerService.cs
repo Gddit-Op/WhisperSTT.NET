@@ -32,6 +32,30 @@ public sealed class AvaloniaFilePickerService : IFilePickerService
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
+    public async Task<string?> PickModelFileAsync(CancellationToken cancellationToken = default)
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
+        {
+            return null;
+        }
+
+        var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select Whisper model file",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Whisper Model Files")
+                {
+                    Patterns = ["*.bin"]
+                }
+            ]
+        }).ConfigureAwait(true);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
+
     public async Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken = default)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })

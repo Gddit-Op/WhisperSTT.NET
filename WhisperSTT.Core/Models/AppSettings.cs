@@ -45,8 +45,6 @@ public sealed class TranscriptionSettings
 
     public int FileThreadCount { get; set; } = Math.Max(1, Environment.ProcessorCount - 1);
 
-    public string CustomModelId { get; set; } = string.Empty;
-
     public string CustomModelPath { get; set; } = string.Empty;
 
     public string OpenVinoRuntimePath { get; set; } = string.Empty;

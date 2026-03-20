@@ -220,7 +220,6 @@ Current settings structure:
     "FileModelPreset": "Small",
     "RecordingThreadCount": 4,
     "FileThreadCount": 7,
-    "CustomModelId": "",
     "CustomModelPath": "",
     "LastFilePath": ""
   },
@@ -288,7 +287,7 @@ Current relevant log entries include:
 - Live preview is currently only a stored setting and not a streaming transcription pipeline.
 - Hotkeys are parsed from strings, but invalid combinations are not surfaced with strong UI validation yet.
 - The app currently defaults to microphone device `0` when the configured device is unavailable.
-- The `CustomModelId` field is stored but not yet used for download or resolution logic.
+- `Custom Model Path` can be filled manually or selected via the `Browse` button in Settings.
 - There is no installer or packaging yet.
 - Automatic paste still depends on clipboard ownership and the focused target application; the manual `Copy` button is the fallback.
 - Status icons are generated dynamically in code rather than loaded from static `.ico` assets.

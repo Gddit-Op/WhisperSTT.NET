@@ -1,3 +1,18 @@
+https://github.com/KoljaB/RealtimeSTT
+https://huggingface.co/cstr/whisper-large-v3-turbo-german-ggml
+
+ Assessment
+  Right now this repo is set up for low-latency after stop dictation, not near-real-time STT during capture.
+  Best current configuration for minimum delay:
+  - enable Transcribe microphone directly from memory
+  - use Tiny or Base
+  - keep RuntimePreference=Auto or explicitly choose Cuda/Vulkan/OpenVino if available
+  - keep recording clips short
+
+  If you want actual near-real-time STT, the next required change is architectural: chunked capture plus incremental
+  Whisper processing plus UI updates during recording. I can implement the first pass of that pipeline next.
+
+
 • Ja, deutlich.
 
   Die größten Hebel sehe ich hier: 

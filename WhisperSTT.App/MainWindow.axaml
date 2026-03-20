@@ -248,10 +248,15 @@
                   <TextBox Text="{Binding Settings.Transcription.RecordingThreadCount}" />
                   <TextBlock Margin="0,16,0,4" Text="File Threads" />
                   <TextBox Text="{Binding Settings.Transcription.FileThreadCount}" />
-                  <TextBlock Margin="0,16,0,4" Text="Custom Model ID" />
-                  <TextBox Text="{Binding Settings.Transcription.CustomModelId}" />
                   <TextBlock Margin="0,16,0,4" Text="Custom Model Path" />
-                  <TextBox Text="{Binding Settings.Transcription.CustomModelPath}" />
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Margin="0,0,12,0"
+                             Text="{Binding CustomModelPath}" />
+                    <Button Grid.Column="1"
+                            Padding="12,6"
+                            Command="{Binding BrowseModelFileCommand}"
+                            Content="Browse" />
+                  </Grid>
                   <TextBlock Margin="0,16,0,4" Text="OpenVINO Toolkit Path" />
                   <Grid ColumnDefinitions="*,Auto">
                     <TextBox Margin="0,0,12,0"

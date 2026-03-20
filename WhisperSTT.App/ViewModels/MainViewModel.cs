@@ -74,6 +74,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording || _audioRecorderService.IsRecording);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync);
         BrowseFileCommand = new AsyncRelayCommand(BrowseFileAsync);
+        BrowseModelFileCommand = new AsyncRelayCommand(BrowseModelFileAsync);
         BrowseOpenVinoRuntimePathCommand = new AsyncRelayCommand(BrowseOpenVinoRuntimePathAsync);
         TranscribeFileCommand = new AsyncRelayCommand(TranscribeSelectedFileAsync, CanTranscribeFile);
         DownloadModelCommand = new AsyncRelayCommand(DownloadSelectedModelAsync, () => Status != AppStatus.Recording);
@@ -105,6 +106,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand SaveSettingsCommand { get; }
 
     public AsyncRelayCommand BrowseFileCommand { get; }
+
+    public AsyncRelayCommand BrowseModelFileCommand { get; }
 
     public AsyncRelayCommand BrowseOpenVinoRuntimePathCommand { get; }
 
@@ -217,6 +220,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             Settings.Transcription.OpenVinoRuntimePath = value;
             OnPropertyChanged();
+        }
+    }
+
+    public string CustomModelPath
+    {
+        get => Settings.Transcription.CustomModelPath;
+        set
+        {
+            if (string.Equals(Settings.Transcription.CustomModelPath, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Settings.Transcription.CustomModelPath = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ActiveModelSummary));
         }
     }
 
@@ -477,6 +496,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedFilePath = filePath;
         TryLoadPreview(filePath);
         RaiseCommandStates();
+    }
+
+    private async Task BrowseModelFileAsync()
+    {
+        var filePath = await _filePickerService.PickModelFileAsync().ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return;
+        }
+
+        CustomModelPath = filePath;
+        LastError = $"Custom model selected: {filePath}";
     }
 
     private async Task BrowseOpenVinoRuntimePathAsync()

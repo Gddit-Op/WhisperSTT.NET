@@ -14,6 +14,7 @@ Implemented:
 - Global hotkeys for start/stop and cancel
 - Microphone recording via `NAudio`
 - Offline file and microphone transcription via `Whisper.net`
+- Optional client/server transcription over a WebRTC data channel
 - Language mode selection: `auto`, `de`, `en`
 - Explicit Whisper language detection when `auto` is selected
 - Runtime selection: `Auto`, `Cpu`, `OpenVino`, `Vulkan`, `Cuda`
@@ -103,12 +104,15 @@ Notes:
 - `CommunityToolkit.Mvvm`
 - `NAudio` for microphone capture and audio handling
 - `Whisper.net` for offline Whisper inference
+- `SIPSorcery` for WebRTC peer connections and data channels
 
 ## Solution Layout
 
 - `WhisperSTTClassic.sln`: main solution file to use
 - `WhisperSTT.App`: Avalonia tray application and Windows-specific integrations
+- `WhisperSTT.Client`: reusable WebRTC transcription client library
 - `WhisperSTT.Core`: settings, models, paths, and service contracts
+- `WhisperSTT.Server`: ASP.NET Core host for WebRTC signaling and remote Whisper transcription
 - `Task.md`: original product/task specification
 
 ## Build
@@ -125,6 +129,21 @@ Run the app:
 ```powershell
 dotnet run --project .\WhisperSTT.App\WhisperSTT.App.csproj
 ```
+
+Run the server:
+
+```powershell
+dotnet run --project .\WhisperSTT.Server\WhisperSTT.Server.csproj
+```
+
+## Remote Transcription
+
+When `Execution Target` is set to `WebRtc` in the desktop app, audio is sent to `WhisperSTT.Server` over a WebRTC data channel.
+
+- Signaling uses `POST /api/webrtc/sessions`
+- The client sends audio bytes or float32 capture buffers plus the Whisper settings for the request
+- The server prefers the incoming model path when it exists locally and otherwise falls back to the requested preset in its own model directory
+- By default the server reuses the same `%APPDATA%/WhisperNET` data root as the desktop app
 
 Publish a Windows desktop build:
 

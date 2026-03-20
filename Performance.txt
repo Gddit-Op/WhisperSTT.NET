@@ -11,6 +11,7 @@ https://huggingface.co/cstr/whisper-large-v3-turbo-german-ggml
 
   If you want actual near-real-time STT, the next required change is architectural: chunked capture plus incremental
   Whisper processing plus UI updates during recording. I can implement the first pass of that pipeline next.
+  Voice Activity Detection: Automatically detects when you start and stop speaking.
 
 
 • Ja, deutlich.

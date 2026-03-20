@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="WhisperSTT.App/WhisperSTT.App.csproj" />
+  <Project Path="WhisperSTT.Client/WhisperSTT.Client.csproj" />
   <Project Path="WhisperSTT.Core/WhisperSTT.Core.csproj" />
+  <Project Path="WhisperSTT.Server/WhisperSTT.Server.csproj" />
 </Solution>

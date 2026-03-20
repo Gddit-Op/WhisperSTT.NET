@@ -6,6 +6,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using WhisperSTT.App.Services;
 using WhisperSTT.App.ViewModels;
+using WhisperSTT.Client.Services;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
 
@@ -47,7 +48,8 @@ public partial class App : Avalonia.Application
             var logger = new FileActivityLogService(paths);
             var history = new TranscriptHistoryService(paths);
             var modelManager = new WhisperModelService(paths);
-            var transcriptionService = new WhisperTranscriptionService(logger);
+            var localTranscriptionService = new WhisperTranscriptionService(logger);
+            var remoteTranscriptionService = new WebRtcTranscriptionClient(new HttpClient(), logger);
             var recorderService = new SoundFlowRecorderService(paths, logger);
             var audioInputDeviceService = new AudioInputDeviceService();
             var pasteService = new ClipboardPasteService(logger);
@@ -61,7 +63,8 @@ public partial class App : Avalonia.Application
                 logger,
                 history,
                 modelManager,
-                transcriptionService,
+                localTranscriptionService,
+                remoteTranscriptionService,
                 recorderService,
                 audioInputDeviceService,
                 pasteService,

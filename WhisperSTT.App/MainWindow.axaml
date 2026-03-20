@@ -102,6 +102,10 @@
                 <TextBlock Margin="0,10,0,0"
                            Text="{Binding ActiveModelSummary}"
                            TextWrapping="Wrap" />
+                <TextBlock Margin="0,12,0,0"
+                           Opacity="0.75"
+                           Text="{Binding TranscriptionModeSummary}"
+                           TextWrapping="Wrap" />
               </StackPanel>
             </Border>
           </Grid>
@@ -232,6 +236,9 @@
                   <TextBlock FontSize="18"
                              FontWeight="SemiBold"
                              Text="Transcription" />
+                  <TextBlock Margin="0,16,0,4" Text="Execution Target" />
+                  <ComboBox ItemsSource="{Binding TranscriptionTargets}"
+                            SelectedItem="{Binding SelectedTranscriptionTarget}" />
                   <TextBlock Margin="0,16,0,4" Text="Language Mode" />
                   <ComboBox ItemsSource="{Binding Languages}"
                             SelectedItem="{Binding Settings.Transcription.LanguageMode}" />
@@ -266,9 +273,19 @@
                             Command="{Binding BrowseOpenVinoRuntimePathCommand}"
                             Content="Browse" />
                   </Grid>
+                  <TextBlock Margin="0,16,0,4" Text="Remote Server URL" />
+                  <TextBox Text="{Binding RemoteServerUrl}" />
+                  <TextBlock Margin="0,16,0,4" Text="ICE Server URL (optional)" />
+                  <TextBox Text="{Binding WebRtcIceServerUrl}" />
+                  <TextBlock Margin="0,16,0,4" Text="Remote Timeout (seconds)" />
+                  <TextBox Text="{Binding RemoteTimeoutSeconds}" />
                   <TextBlock Margin="0,8,0,0"
                              Opacity="0.7"
                              Text="Select the folder that contains the OpenVINO runtime binaries. When set, it is added to the process PATH before OpenVINO is initialized."
+                             TextWrapping="Wrap" />
+                  <TextBlock Margin="0,12,0,0"
+                             Opacity="0.7"
+                             Text="When Execution Target is WebRtc, the desktop app sends audio and transcription requests over a WebRTC data channel. The server resolves the preferred model path when possible and otherwise falls back to its own configured preset storage."
                              TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"

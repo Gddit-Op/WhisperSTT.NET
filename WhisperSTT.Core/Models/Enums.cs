@@ -33,3 +33,15 @@ public enum WhisperRuntimePreference
     Vulkan,
     Cuda
 }
+
+public enum TranscriptionTarget
+{
+    Local,
+    WebRtc
+}
+
+public enum RemoteTranscriptionAudioFormat
+{
+    FileBytes,
+    Float32Samples
+}

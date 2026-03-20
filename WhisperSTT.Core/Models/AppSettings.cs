@@ -33,6 +33,8 @@ public sealed class AudioSettings
 
 public sealed class TranscriptionSettings
 {
+    public TranscriptionTarget Target { get; set; } = TranscriptionTarget.Local;
+
     public LanguageMode LanguageMode { get; set; } = LanguageMode.Auto;
 
     public WhisperRuntimePreference RuntimePreference { get; set; } = WhisperRuntimePreference.Auto;
@@ -48,6 +50,12 @@ public sealed class TranscriptionSettings
     public string CustomModelPath { get; set; } = string.Empty;
 
     public string OpenVinoRuntimePath { get; set; } = string.Empty;
+
+    public string RemoteServerUrl { get; set; } = "http://localhost:5177";
+
+    public string WebRtcIceServerUrl { get; set; } = string.Empty;
+
+    public int RemoteTimeoutSeconds { get; set; } = 300;
 
     public string LastFilePath { get; set; } = string.Empty;
 }

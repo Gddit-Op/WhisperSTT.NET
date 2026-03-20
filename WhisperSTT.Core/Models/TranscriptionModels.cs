@@ -22,7 +22,11 @@ public sealed record TranscriptionRequest(
     bool EnableDiagnosticLogging = false,
     float[]? AudioSamples = null,
     int AudioSampleRate = 0,
-    int AudioChannels = 0);
+    int AudioChannels = 0,
+    ModelPreset RequestedModelPreset = ModelPreset.Small,
+    string RemoteServerUrl = "",
+    string WebRtcIceServerUrl = "",
+    int RemoteTimeoutSeconds = 300);
 
 public sealed record TranscriptionSegment(TimeSpan Start, TimeSpan End, string Text);
 

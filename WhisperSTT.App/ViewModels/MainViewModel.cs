@@ -18,7 +18,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly IActivityLogService _activityLogService;
     private readonly ITranscriptHistoryService _historyService;
     private readonly IModelManagementService _modelManagementService;
-    private readonly ITranscriptionService _transcriptionService;
+    private readonly ITranscriptionService _localTranscriptionService;
+    private readonly ITranscriptionService _remoteTranscriptionService;
     private readonly IAudioRecorderService _audioRecorderService;
     private readonly IAudioInputDeviceService _audioInputDeviceService;
     private readonly IPasteService _pasteService;
@@ -44,7 +45,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IActivityLogService activityLogService,
         ITranscriptHistoryService historyService,
         IModelManagementService modelManagementService,
-        ITranscriptionService transcriptionService,
+        ITranscriptionService localTranscriptionService,
+        ITranscriptionService remoteTranscriptionService,
         IAudioRecorderService audioRecorderService,
         IAudioInputDeviceService audioInputDeviceService,
         IPasteService pasteService,
@@ -57,7 +59,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _activityLogService = activityLogService;
         _historyService = historyService;
         _modelManagementService = modelManagementService;
-        _transcriptionService = transcriptionService;
+        _localTranscriptionService = localTranscriptionService;
+        _remoteTranscriptionService = remoteTranscriptionService;
         _audioRecorderService = audioRecorderService;
         _audioInputDeviceService = audioInputDeviceService;
         _pasteService = pasteService;
@@ -77,7 +80,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         BrowseModelFileCommand = new AsyncRelayCommand(BrowseModelFileAsync);
         BrowseOpenVinoRuntimePathCommand = new AsyncRelayCommand(BrowseOpenVinoRuntimePathAsync);
         TranscribeFileCommand = new AsyncRelayCommand(TranscribeSelectedFileAsync, CanTranscribeFile);
-        DownloadModelCommand = new AsyncRelayCommand(DownloadSelectedModelAsync, () => Status != AppStatus.Recording);
+        DownloadModelCommand = new AsyncRelayCommand(
+            DownloadSelectedModelAsync,
+            () => Status != AppStatus.Recording && !_audioRecorderService.IsRecording && !IsRemoteTranscription);
         DeleteTempAudioFilesCommand = new AsyncRelayCommand(DeleteTempAudioFilesAsync, () => Status != AppStatus.Recording && !_audioRecorderService.IsRecording);
         CopyLatestTranscriptCommand = new AsyncRelayCommand(CopyLatestTranscriptAsync, CanCopyLatestTranscript);
         PlayPreviewCommand = new RelayCommand(PlayPreview, CanPreviewFile);
@@ -94,6 +99,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AppSettings Settings { get; }
 
     public Array Languages { get; } = Enum.GetValues<LanguageMode>();
+
+    public Array TranscriptionTargets { get; } = Enum.GetValues<TranscriptionTarget>();
 
     public Array RuntimePreferences { get; } = Enum.GetValues<WhisperRuntimePreference>();
 
@@ -223,6 +230,75 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public TranscriptionTarget SelectedTranscriptionTarget
+    {
+        get => Settings.Transcription.Target;
+        set
+        {
+            if (Settings.Transcription.Target == value)
+            {
+                return;
+            }
+
+            Settings.Transcription.Target = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsRemoteTranscription));
+            OnPropertyChanged(nameof(ActiveModelSummary));
+            OnPropertyChanged(nameof(TranscriptionModeSummary));
+            RaiseCommandStates();
+        }
+    }
+
+    public bool IsRemoteTranscription => SelectedTranscriptionTarget == TranscriptionTarget.WebRtc;
+
+    public string RemoteServerUrl
+    {
+        get => Settings.Transcription.RemoteServerUrl;
+        set
+        {
+            if (string.Equals(Settings.Transcription.RemoteServerUrl, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Settings.Transcription.RemoteServerUrl = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ActiveModelSummary));
+            OnPropertyChanged(nameof(TranscriptionModeSummary));
+        }
+    }
+
+    public string WebRtcIceServerUrl
+    {
+        get => Settings.Transcription.WebRtcIceServerUrl;
+        set
+        {
+            if (string.Equals(Settings.Transcription.WebRtcIceServerUrl, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Settings.Transcription.WebRtcIceServerUrl = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public int RemoteTimeoutSeconds
+    {
+        get => Settings.Transcription.RemoteTimeoutSeconds;
+        set
+        {
+            var normalizedValue = Math.Max(1, value);
+            if (Settings.Transcription.RemoteTimeoutSeconds == normalizedValue)
+            {
+                return;
+            }
+
+            Settings.Transcription.RemoteTimeoutSeconds = normalizedValue;
+            OnPropertyChanged();
+        }
+    }
+
     public string CustomModelPath
     {
         get => Settings.Transcription.CustomModelPath;
@@ -275,12 +351,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get
         {
+            if (IsRemoteTranscription)
+            {
+                return $"Remote mode via {RemoteServerUrl}. Requested preset: {Settings.Transcription.RecordingModelPreset}. The server will use the preferred model path when available and otherwise resolve the preset from its own model store.";
+            }
+
             var recordingModelPath = _modelManagementService.ResolveModelPath(Settings, Settings.Transcription.RecordingModelPreset);
             return File.Exists(recordingModelPath)
                 ? $"Ready: {recordingModelPath}"
                 : $"Missing model file: {recordingModelPath}";
         }
     }
+
+    public string TranscriptionModeSummary => IsRemoteTranscription
+        ? $"Remote WebRTC transcription server: {RemoteServerUrl}"
+        : "Local in-process transcription using Whisper.NET";
 
     public string PersistenceSummary =>
         $"Config: {_settingsStore.ConfigPath}{Environment.NewLine}History: {_historyService.HistoryPath}{Environment.NewLine}Log: {_activityLogService.LogPath}{Environment.NewLine}Temp: {_paths.TempDirectory}";
@@ -378,7 +463,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _fileTranscriptionTimer.Stop();
         _fileTranscriptionTimer.Tick -= OnFileTranscriptionTimerTick;
-        (_transcriptionService as IDisposable)?.Dispose();
+        (_localTranscriptionService as IDisposable)?.Dispose();
+        (_remoteTranscriptionService as IDisposable)?.Dispose();
         (_audioRecorderService as IDisposable)?.Dispose();
         _audioPreviewService.Dispose();
     }
@@ -436,14 +522,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task<TranscriptionResult> TranscribeAsync(RecordedAudioCapture audioCapture, ModelPreset preset, int threadCount)
     {
         var modelPath = _modelManagementService.ResolveModelPath(Settings, preset);
-        if (!File.Exists(modelPath))
+        if (!IsRemoteTranscription && !File.Exists(modelPath))
         {
             throw new FileNotFoundException(
                 $"Model file was not found. Download the selected model first from Settings.{Environment.NewLine}{modelPath}",
                 modelPath);
         }
 
-        var result = await _transcriptionService.TranscribeAsync(new TranscriptionRequest(
+        var transcriptionService = IsRemoteTranscription
+            ? _remoteTranscriptionService
+            : _localTranscriptionService;
+
+        var result = await transcriptionService.TranscribeAsync(new TranscriptionRequest(
             audioCapture.AudioFilePath ?? string.Empty,
             modelPath,
             Settings.Transcription.LanguageMode,
@@ -454,7 +544,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Settings.Logging.EnableLogging,
             audioCapture.AudioSamples,
             audioCapture.SampleRate,
-            audioCapture.Channels)).ConfigureAwait(true);
+            audioCapture.Channels,
+            preset,
+            RemoteServerUrl,
+            WebRtcIceServerUrl,
+            RemoteTimeoutSeconds)).ConfigureAwait(true);
 
         var audioSourceDescription = audioCapture.AudioSamples is { Length: > 0 }
             ? $"microphone memory buffer ({audioCapture.SampleRate} Hz, {audioCapture.Channels} ch)"
@@ -466,10 +560,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var usedRuntimeText = string.IsNullOrWhiteSpace(result.UsedRuntime)
             ? "unknown"
             : result.UsedRuntime;
+        var transportText = IsRemoteTranscription
+            ? $"remote WebRTC server {RemoteServerUrl}"
+            : "local in-process engine";
+        var modelDescription = IsRemoteTranscription
+            ? $"requested preset {preset}"
+            : $"model {modelPath}";
+        await LogAsync($"Configured target: {SelectedTranscriptionTarget}.").ConfigureAwait(true);
+        await LogAsync($"Transcription transport: {transportText}.").ConfigureAwait(true);
         await LogAsync($"Configured runtime: {Settings.Transcription.RuntimePreference}.").ConfigureAwait(true);
         await LogAsync($"Used runtime: {usedRuntimeText}.").ConfigureAwait(true);
         await LogAsync($"Detected language: {detectedLanguageText}.").ConfigureAwait(true);
-        await LogAsync($"Transcription completed with model {modelPath}; audio source = {audioSourceDescription}.").ConfigureAwait(true);
+        await LogAsync($"Transcription completed with {modelDescription}; audio source = {audioSourceDescription}.").ConfigureAwait(true);
         return result;
     }
 
@@ -559,6 +661,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
+            if (IsRemoteTranscription)
+            {
+                LastError = "Model download is only available in local mode. Download or configure the model on the server host.";
+                return;
+            }
+
             SetStatus(AppStatus.Transcribing, "Downloading Whisper model");
             var modelPath = await _modelManagementService
                 .DownloadModelAsync(Settings, Settings.Transcription.RecordingModelPreset)

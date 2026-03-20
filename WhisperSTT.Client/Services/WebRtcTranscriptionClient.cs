@@ -1,7 +1,5 @@
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using SIPSorcery.Net;
 using WhisperSTT.Core.Contracts;
 using WhisperSTT.Core.Models;
@@ -11,11 +9,6 @@ namespace WhisperSTT.Client.Services;
 
 public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     private readonly HttpClient _httpClient;
     private readonly IActivityLogService? _activityLogService;
     private readonly SemaphoreSlim _requestGate = new(1, 1);
@@ -210,11 +203,12 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
         dataChannel.onerror += error => openSource.TrySetException(new InvalidOperationException($"WebRTC data channel error: {error}"));
         dataChannel.onmessage += (_, _, data) =>
         {
-            var payload = Encoding.UTF8.GetString(data);
             RemoteTranscriptionResultMessage? response;
             try
             {
-                response = JsonSerializer.Deserialize<RemoteTranscriptionResultMessage>(payload, JsonOptions);
+                response = JsonSerializer.Deserialize(
+                    data,
+                    WebRtcClientJsonContext.Default.RemoteTranscriptionResultMessage);
             }
             catch (JsonException)
             {
@@ -238,9 +232,14 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
 
     private async Task<WebRtcOfferResponse> PostOfferAsync(Uri endpoint, WebRtcOfferRequest offerRequest)
     {
-        using var response = await _httpClient.PostAsJsonAsync(endpoint, offerRequest, JsonOptions).ConfigureAwait(false);
+        using var content = JsonContent.Create(
+            offerRequest,
+            WebRtcClientJsonContext.Default.WebRtcOfferRequest);
+        using var response = await _httpClient.PostAsync(endpoint, content).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        var offerResponse = await response.Content.ReadFromJsonAsync<WebRtcOfferResponse>(JsonOptions).ConfigureAwait(false);
+        var offerResponse = await response.Content
+            .ReadFromJsonAsync(WebRtcClientJsonContext.Default.WebRtcOfferResponse)
+            .ConfigureAwait(false);
         return offerResponse ?? throw new InvalidOperationException("WebRTC offer response was empty.");
     }
 
@@ -335,9 +334,19 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
         return Enum.Parse<RTCSdpType>(type, ignoreCase: true);
     }
 
-    private void SendJson<T>(T message)
+    private void SendJson(RemoteTranscriptionStartMessage message)
     {
-        var json = JsonSerializer.Serialize(message, JsonOptions);
+        var json = JsonSerializer.Serialize(
+            message,
+            WebRtcClientJsonContext.Default.RemoteTranscriptionStartMessage);
+        GetRequiredDataChannel().send(json);
+    }
+
+    private void SendJson(RemoteTranscriptionEndMessage message)
+    {
+        var json = JsonSerializer.Serialize(
+            message,
+            WebRtcClientJsonContext.Default.RemoteTranscriptionEndMessage);
         GetRequiredDataChannel().send(json);
     }
 

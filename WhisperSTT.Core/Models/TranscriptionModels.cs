@@ -24,6 +24,7 @@ public sealed record TranscriptionRequest(
     int AudioSampleRate = 0,
     int AudioChannels = 0,
     ModelPreset RequestedModelPreset = ModelPreset.Small,
+    RemoteTranscriptionSourceType SourceType = RemoteTranscriptionSourceType.Recording,
     string RemoteServerUrl = "",
     string WebRtcIceServerUrl = "",
     int RemoteTimeoutSeconds = 300);

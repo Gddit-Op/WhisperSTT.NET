@@ -55,6 +55,7 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
             var startMessage = new RemoteTranscriptionStartMessage(
                 WebRtcProtocolConstants.TranscriptionStartMessageType,
                 requestId,
+                request.SourceType,
                 payload.AudioFormat,
                 payload.FileName,
                 payload.Bytes.LongLength,

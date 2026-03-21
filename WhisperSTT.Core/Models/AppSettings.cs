@@ -33,7 +33,7 @@ public sealed class AudioSettings
 
 public sealed class TranscriptionSettings
 {
-    public TranscriptionTarget Target { get; set; } = TranscriptionTarget.Local;
+    public TranscriptionTarget Target { get; set; } = TranscriptionTarget.WebRtc;
 
     public LanguageMode LanguageMode { get; set; } = LanguageMode.Auto;
 

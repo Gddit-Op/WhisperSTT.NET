@@ -36,7 +36,7 @@
                      FontSize="14"
                      Foreground="{StaticResource TextBrush}"
                      Opacity="0.75"
-                     Text="Offline desktop speech-to-text for system-wide dictation and local file transcription." />
+                     Text="Desktop capture with server-side Whisper transcription over WebRTC." />
         </StackPanel>
 
         <StackPanel Grid.Column="1"
@@ -285,7 +285,7 @@
                              TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"
-                             Text="When Execution Target is WebRtc, the desktop app sends audio and transcription requests over a WebRTC data channel. The server resolves the preferred model path when possible and otherwise falls back to its own configured preset storage."
+                             Text="When Execution Target is WebRtc, the desktop app sends audio over a WebRTC data channel. The server performs transcription with its own configured Whisper model, runtime, language mode, and thread counts from appsettings.json."
                              TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"

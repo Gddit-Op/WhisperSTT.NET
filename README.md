@@ -136,14 +136,24 @@ Run the server:
 dotnet run --project .\WhisperSTT.Server\WhisperSTT.Server.csproj
 ```
 
+Server configuration is read from `WhisperSTT.Server/appsettings.json`.
+
+- `Urls` controls the ASP.NET Core bind address
+- `Server:DataRoot` controls the server-local model/temp/config directory
+- `Server:LogFilePath` controls the dedicated server activity log file
+- `Server:PreferServerWhisperConfiguration` makes the server-side Whisper configuration authoritative
+- `Whisper:*` controls the standalone server transcription model, runtime, language, thread counts, and optional custom model/OpenVINO paths
+
 ## Remote Transcription
 
 When `Execution Target` is set to `WebRtc` in the desktop app, audio is sent to `WhisperSTT.Server` over a WebRTC data channel.
 
 - Signaling uses `POST /api/webrtc/sessions`
-- The client sends audio bytes or float32 capture buffers plus the Whisper settings for the request
-- The server prefers the incoming model path when it exists locally and otherwise falls back to the requested preset in its own model directory
-- By default the server reuses the same `%APPDATA%/WhisperNET` data root as the desktop app
+- The client sends audio bytes or float32 capture buffers plus source metadata for `Recording` vs `File`
+- By default the server ignores client Whisper settings and uses the standalone `Whisper` section from `WhisperSTT.Server/appsettings.json`
+- The server can use separate `RecordingModelPreset` / `FileModelPreset` and thread counts based on the incoming source type
+- By default the server uses `%APPDATA%\WhisperNET.Server` and writes its own log to `%APPDATA%\WhisperNET.Server\server.log`
+- New configurations default to `WebRtc`, so transcription runs on the server unless you explicitly switch back to `Local`
 
 Publish a Windows desktop build:
 

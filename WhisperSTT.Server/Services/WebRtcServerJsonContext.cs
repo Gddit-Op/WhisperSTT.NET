@@ -2,11 +2,12 @@ using System.Text.Json.Serialization;
 using WhisperSTT.Core.Contracts;
 using WhisperSTT.Core.Models;
 
-namespace WhisperSTT.Client.Services;
+namespace WhisperSTT.Server.Services;
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true)]
+[JsonSerializable(typeof(ServerStatusResponse))]
 [JsonSerializable(typeof(WebRtcSessionDescription))]
 [JsonSerializable(typeof(WebRtcOfferRequest))]
 [JsonSerializable(typeof(WebRtcOfferResponse))]
@@ -16,6 +17,11 @@ namespace WhisperSTT.Client.Services;
 [JsonSerializable(typeof(TranscriptionResult))]
 [JsonSerializable(typeof(TranscriptionSegment))]
 [JsonSerializable(typeof(RemoteTranscriptionSourceType))]
-internal sealed partial class WebRtcClientJsonContext : JsonSerializerContext
+internal sealed partial class WebRtcServerJsonContext : JsonSerializerContext
 {
 }
+
+internal sealed record ServerStatusResponse(
+    string Service,
+    string SignalingEndpoint,
+    string DataRoot);

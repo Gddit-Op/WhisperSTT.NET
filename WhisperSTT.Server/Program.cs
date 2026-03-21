@@ -1,44 +1,51 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using WhisperSTT.Core.Contracts;
-using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
+using WhisperSTT.Server.Configuration;
 using WhisperSTT.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, WebRtcServerJsonContext.Default);
 });
 
-var dataRoot = builder.Configuration["DataRoot"];
-var paths = string.IsNullOrWhiteSpace(dataRoot)
-    ? new ApplicationPaths()
-    : new ApplicationPaths(dataRoot);
+var configuredOptions = builder.Configuration
+    .GetSection(ServerOptions.SectionName)
+    .Get<ServerOptions>() ?? new ServerOptions();
+var whisperOptions = builder.Configuration
+    .GetSection(WhisperServerTranscriptionOptions.SectionName)
+    .Get<WhisperServerTranscriptionOptions>() ?? new WhisperServerTranscriptionOptions();
+var dataRoot = ResolveConfiguredPath(configuredOptions.DataRoot, builder.Environment.ContentRootPath);
+var logFilePath = ResolveConfiguredPath(configuredOptions.LogFilePath, builder.Environment.ContentRootPath);
+whisperOptions.CustomModelPath = ResolveConfiguredPath(whisperOptions.CustomModelPath, builder.Environment.ContentRootPath);
+whisperOptions.OpenVinoRuntimePath = ResolveConfiguredPath(whisperOptions.OpenVinoRuntimePath, builder.Environment.ContentRootPath);
+var paths = new ApplicationPaths(
+    rootDirectory: dataRoot,
+    logPath: logFilePath);
 paths.EnsureCreated();
 
-var settingsStore = new JsonSettingsStore(paths);
-var settings = await settingsStore.LoadAsync().ConfigureAwait(false);
 var logger = new FileActivityLogService(paths);
+await logger.WriteAsync(
+    $"Server startup. DataRoot={paths.RootDirectory}; LogPath={paths.LogPath}; PreferServerWhisperConfiguration={configuredOptions.PreferServerWhisperConfiguration}; CustomModelPath={whisperOptions.CustomModelPath}; Runtime={whisperOptions.RuntimePreference}.")
+    .ConfigureAwait(false);
 
 builder.Services.AddSingleton(paths);
 builder.Services.AddSingleton<IActivityLogService>(logger);
-builder.Services.AddSingleton<ISettingsStore>(settingsStore);
-builder.Services.AddSingleton(settings);
+builder.Services.AddSingleton(configuredOptions);
+builder.Services.AddSingleton(whisperOptions);
 builder.Services.AddSingleton<WhisperModelService>();
 builder.Services.AddSingleton<WhisperServerTranscriptionService>();
 builder.Services.AddSingleton<WebRtcSessionRegistry>();
 
 var app = builder.Build();
 
-app.MapGet("/", () => Results.Ok(new
-{
-    service = "WhisperSTT.Server",
-    signalingEndpoint = WebRtcProtocolConstants.SessionEndpoint,
-    dataRoot = paths.RootDirectory
-}));
+app.MapGet(
+    "/",
+    () => Results.Ok(new ServerStatusResponse(
+        "WhisperSTT.Server",
+        WebRtcProtocolConstants.SessionEndpoint,
+        paths.RootDirectory)));
 
 app.MapPost(
     WebRtcProtocolConstants.SessionEndpoint,
@@ -49,3 +56,19 @@ app.MapPost(
     });
 
 app.Run();
+
+static string ResolveConfiguredPath(string configuredPath, string contentRootPath)
+{
+    if (string.IsNullOrWhiteSpace(configuredPath))
+    {
+        return string.Empty;
+    }
+
+    var expandedPath = Environment.ExpandEnvironmentVariables(configuredPath);
+    if (Path.IsPathRooted(expandedPath))
+    {
+        return expandedPath;
+    }
+
+    return Path.GetFullPath(Path.Combine(contentRootPath, expandedPath));
+}

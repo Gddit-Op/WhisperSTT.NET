@@ -45,3 +45,9 @@ public enum RemoteTranscriptionAudioFormat
     FileBytes,
     Float32Samples
 }
+
+public enum RemoteTranscriptionSourceType
+{
+    Recording,
+    File
+}

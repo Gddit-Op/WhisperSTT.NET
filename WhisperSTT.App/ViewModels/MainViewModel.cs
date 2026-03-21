@@ -353,7 +353,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (IsRemoteTranscription)
             {
-                return $"Remote mode via {RemoteServerUrl}. Requested preset: {Settings.Transcription.RecordingModelPreset}. The server will use the preferred model path when available and otherwise resolve the preset from its own model store.";
+                return $"Remote mode via {RemoteServerUrl}. The server uses its own Whisper configuration for model, runtime, language, and thread counts.";
             }
 
             var recordingModelPath = _modelManagementService.ResolveModelPath(Settings, Settings.Transcription.RecordingModelPreset);
@@ -499,7 +499,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var result = await TranscribeAsync(
             recordedAudio,
             Settings.Transcription.RecordingModelPreset,
-            Settings.Transcription.RecordingThreadCount).ConfigureAwait(true);
+            Settings.Transcription.RecordingThreadCount,
+            RemoteTranscriptionSourceType.Recording).ConfigureAwait(true);
         transcriptionStopwatch.Stop();
 
         CurrentTranscript = result.Text;
@@ -519,7 +520,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PlayFeedbackSound(SystemSounds.Exclamation);
     }
 
-    private async Task<TranscriptionResult> TranscribeAsync(RecordedAudioCapture audioCapture, ModelPreset preset, int threadCount)
+    private async Task<TranscriptionResult> TranscribeAsync(
+        RecordedAudioCapture audioCapture,
+        ModelPreset preset,
+        int threadCount,
+        RemoteTranscriptionSourceType sourceType)
     {
         var modelPath = _modelManagementService.ResolveModelPath(Settings, preset);
         if (!IsRemoteTranscription && !File.Exists(modelPath))
@@ -546,6 +551,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             audioCapture.SampleRate,
             audioCapture.Channels,
             preset,
+            sourceType,
             RemoteServerUrl,
             WebRtcIceServerUrl,
             RemoteTimeoutSeconds)).ConfigureAwait(true);
@@ -584,7 +590,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 SampleRate: 0,
                 Channels: 0),
             preset,
-            threadCount);
+            threadCount,
+            RemoteTranscriptionSourceType.File);
     }
 
     private async Task BrowseFileAsync()

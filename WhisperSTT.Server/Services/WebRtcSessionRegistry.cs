@@ -1,37 +1,36 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SIPSorcery.Net;
 using WhisperSTT.Core.Contracts;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
+using WhisperSTT.Server.Configuration;
 
 namespace WhisperSTT.Server.Services;
 
 public sealed class WebRtcSessionRegistry
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     private readonly ConcurrentDictionary<Guid, WebRtcSession> _sessions = new();
     private readonly WhisperServerTranscriptionService _transcriptionService;
     private readonly WhisperModelService _modelService;
-    private readonly AppSettings _settings;
+    private readonly ServerOptions _serverOptions;
+    private readonly WhisperServerTranscriptionOptions _whisperOptions;
     private readonly ApplicationPaths _paths;
     private readonly IActivityLogService _activityLogService;
 
     public WebRtcSessionRegistry(
         WhisperServerTranscriptionService transcriptionService,
         WhisperModelService modelService,
-        AppSettings settings,
+        ServerOptions serverOptions,
+        WhisperServerTranscriptionOptions whisperOptions,
         ApplicationPaths paths,
         IActivityLogService activityLogService)
     {
         _transcriptionService = transcriptionService;
         _modelService = modelService;
-        _settings = settings;
+        _serverOptions = serverOptions;
+        _whisperOptions = whisperOptions;
         _paths = paths;
         _activityLogService = activityLogService;
     }
@@ -44,7 +43,8 @@ public sealed class WebRtcSessionRegistry
             Guid.NewGuid(),
             _transcriptionService,
             _modelService,
-            _settings,
+            _serverOptions,
+            _whisperOptions,
             _paths,
             _activityLogService,
             RemoveSession);
@@ -67,7 +67,8 @@ public sealed class WebRtcSessionRegistry
         private readonly object _sync = new();
         private readonly WhisperServerTranscriptionService _transcriptionService;
         private readonly WhisperModelService _modelService;
-        private readonly AppSettings _settings;
+        private readonly ServerOptions _serverOptions;
+        private readonly WhisperServerTranscriptionOptions _whisperOptions;
         private readonly ApplicationPaths _paths;
         private readonly IActivityLogService _activityLogService;
         private readonly Action<Guid> _removeSession;
@@ -80,7 +81,8 @@ public sealed class WebRtcSessionRegistry
             Guid id,
             WhisperServerTranscriptionService transcriptionService,
             WhisperModelService modelService,
-            AppSettings settings,
+            ServerOptions serverOptions,
+            WhisperServerTranscriptionOptions whisperOptions,
             ApplicationPaths paths,
             IActivityLogService activityLogService,
             Action<Guid> removeSession)
@@ -88,7 +90,8 @@ public sealed class WebRtcSessionRegistry
             Id = id;
             _transcriptionService = transcriptionService;
             _modelService = modelService;
-            _settings = settings;
+            _serverOptions = serverOptions;
+            _whisperOptions = whisperOptions;
             _paths = paths;
             _activityLogService = activityLogService;
             _removeSession = removeSession;
@@ -170,7 +173,10 @@ public sealed class WebRtcSessionRegistry
         {
             try
             {
-                if (TryDeserializeControlMessage(data, out RemoteTranscriptionStartMessage? startMessage) &&
+                if (TryDeserializeControlMessage(
+                        data,
+                        WebRtcServerJsonContext.Default.RemoteTranscriptionStartMessage,
+                        out RemoteTranscriptionStartMessage? startMessage) &&
                     startMessage is not null &&
                     startMessage.IsValid)
                 {
@@ -178,7 +184,10 @@ public sealed class WebRtcSessionRegistry
                     return;
                 }
 
-                if (TryDeserializeControlMessage(data, out RemoteTranscriptionEndMessage? endMessage) &&
+                if (TryDeserializeControlMessage(
+                        data,
+                        WebRtcServerJsonContext.Default.RemoteTranscriptionEndMessage,
+                        out RemoteTranscriptionEndMessage? endMessage) &&
                     endMessage is not null &&
                     endMessage.IsValid)
                 {
@@ -247,7 +256,13 @@ public sealed class WebRtcSessionRegistry
             {
                 tempAudioPath = await MaterializeAudioAsync(pendingRequest.Metadata, payload).ConfigureAwait(false);
                 var modelPath = ResolveModelPath(pendingRequest.Metadata);
-                var transcriptionRequest = CreateTranscriptionRequest(pendingRequest.Metadata, tempAudioPath, payload, modelPath);
+                var transcriptionRequest = CreateTranscriptionRequest(
+                    pendingRequest.Metadata,
+                    tempAudioPath,
+                    payload,
+                    modelPath,
+                    _serverOptions,
+                    _whisperOptions);
                 var result = await _transcriptionService.TranscribeAsync(transcriptionRequest).ConfigureAwait(false);
                 await SendSuccessAsync(pendingRequest.Metadata.RequestId, result).ConfigureAwait(false);
             }
@@ -260,7 +275,10 @@ public sealed class WebRtcSessionRegistry
             }
         }
 
-        private static bool TryDeserializeControlMessage<T>(byte[] data, out T? message)
+        private static bool TryDeserializeControlMessage<T>(
+            byte[] data,
+            JsonTypeInfo<T> jsonTypeInfo,
+            out T? message)
         {
             message = default;
             if (data.Length == 0 || data[0] != (byte)'{')
@@ -270,7 +288,7 @@ public sealed class WebRtcSessionRegistry
 
             try
             {
-                message = JsonSerializer.Deserialize<T>(data, JsonOptions);
+                message = JsonSerializer.Deserialize(data, jsonTypeInfo);
                 return message is not null;
             }
             catch (JsonException)
@@ -281,13 +299,18 @@ public sealed class WebRtcSessionRegistry
 
         private string ResolveModelPath(RemoteTranscriptionStartMessage metadata)
         {
+            if (_serverOptions.PreferServerWhisperConfiguration)
+            {
+                return _modelService.ResolveModelPath(_whisperOptions.GetModelPreset(metadata.SourceType));
+            }
+
             if (!string.IsNullOrWhiteSpace(metadata.PreferredModelPath) &&
                 File.Exists(metadata.PreferredModelPath))
             {
                 return metadata.PreferredModelPath;
             }
 
-            return _modelService.ResolveModelPath(_settings, metadata.RequestedModelPreset);
+            return _modelService.ResolveModelPath(metadata.RequestedModelPreset);
         }
 
         private async Task<string> MaterializeAudioAsync(
@@ -314,8 +337,17 @@ public sealed class WebRtcSessionRegistry
             RemoteTranscriptionStartMessage metadata,
             string tempAudioPath,
             byte[] payload,
-            string modelPath)
+            string modelPath,
+            ServerOptions serverOptions,
+            WhisperServerTranscriptionOptions whisperOptions)
         {
+            var useServerSettings = serverOptions.PreferServerWhisperConfiguration;
+            var languageMode = useServerSettings ? whisperOptions.LanguageMode : metadata.LanguageMode;
+            var runtimePreference = useServerSettings ? whisperOptions.RuntimePreference : metadata.RuntimePreference;
+            var openVinoRuntimePath = useServerSettings ? whisperOptions.OpenVinoRuntimePath : metadata.OpenVinoRuntimePath;
+            var threadCount = useServerSettings ? whisperOptions.GetThreadCount(metadata.SourceType) : metadata.ThreadCount;
+            var modelPreset = useServerSettings ? whisperOptions.GetModelPreset(metadata.SourceType) : metadata.RequestedModelPreset;
+
             if (metadata.AudioFormat == RemoteTranscriptionAudioFormat.Float32Samples)
             {
                 if (payload.Length % sizeof(float) != 0)
@@ -329,31 +361,33 @@ public sealed class WebRtcSessionRegistry
                 return new TranscriptionRequest(
                     string.Empty,
                     modelPath,
-                    metadata.LanguageMode,
-                    metadata.ThreadCount,
-                    metadata.RuntimePreference,
-                    metadata.OpenVinoRuntimePath,
+                    languageMode,
+                    threadCount,
+                    runtimePreference,
+                    openVinoRuntimePath,
                     metadata.IsLivePreview,
                     metadata.EnableDiagnosticLogging,
                     samples,
                     metadata.SampleRate,
                     metadata.Channels,
-                    metadata.RequestedModelPreset);
+                    modelPreset,
+                    metadata.SourceType);
             }
 
             return new TranscriptionRequest(
                 tempAudioPath,
                 modelPath,
-                metadata.LanguageMode,
-                metadata.ThreadCount,
-                metadata.RuntimePreference,
-                metadata.OpenVinoRuntimePath,
+                languageMode,
+                threadCount,
+                runtimePreference,
+                openVinoRuntimePath,
                 metadata.IsLivePreview,
                 metadata.EnableDiagnosticLogging,
                 null,
                 0,
                 0,
-                metadata.RequestedModelPreset);
+                modelPreset,
+                metadata.SourceType);
         }
 
         private async Task SendSuccessAsync(string requestId, TranscriptionResult result)
@@ -377,7 +411,9 @@ public sealed class WebRtcSessionRegistry
 
         private Task SendMessageAsync(RemoteTranscriptionResultMessage message)
         {
-            var json = JsonSerializer.Serialize(message, JsonOptions);
+            var json = JsonSerializer.Serialize(
+                message,
+                WebRtcServerJsonContext.Default.RemoteTranscriptionResultMessage);
             _dataChannel?.send(json);
             return Task.CompletedTask;
         }

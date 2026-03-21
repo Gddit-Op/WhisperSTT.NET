@@ -27,6 +27,7 @@ public sealed record WebRtcOfferResponse(
 public sealed record RemoteTranscriptionStartMessage(
     string MessageType,
     string RequestId,
+    RemoteTranscriptionSourceType SourceType,
     RemoteTranscriptionAudioFormat AudioFormat,
     string? FileName,
     long PayloadLength,

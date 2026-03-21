@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Media;
 using System.IO;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -383,7 +382,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await _audioRecorderService.StartRecordingAsync(Settings.Audio).ConfigureAwait(true);
             SetStatus(AppStatus.Recording, "Recording");
             await LogAsync("Recording started.").ConfigureAwait(true);
-            PlayFeedbackSound(SystemSounds.Asterisk);
+            PlayFeedbackSound();
         }
         catch (Exception exception)
         {
@@ -398,7 +397,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await _audioRecorderService.CancelRecordingAsync().ConfigureAwait(true);
             SetStatus(AppStatus.Idle, "Idle");
             await LogAsync("Recording cancelled.").ConfigureAwait(true);
-            PlayFeedbackSound(SystemSounds.Hand);
+            PlayFeedbackSound();
         }
         catch (Exception exception)
         {
@@ -489,7 +488,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (recordedAudio is null || !recordedAudio.HasAudio)
         {
             SetStatus(AppStatus.Idle, "Idle");
-            LastError = "No microphone audio data was captured. Check the selected input device and Windows microphone access.";
+            LastError = "No microphone audio data was captured. Check the selected input device and microphone permissions.";
             await LogAsync("Recording stopped without usable audio data.").ConfigureAwait(true);
             return;
         }
@@ -517,7 +516,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         await LogAsync($"Microphone transcription completed in {transcriptionStopwatch.Elapsed.TotalMilliseconds:F0} ms.").ConfigureAwait(true);
         SetStatus(AppStatus.Idle, "Idle");
-        PlayFeedbackSound(SystemSounds.Exclamation);
+        PlayFeedbackSound();
     }
 
     private async Task<TranscriptionResult> TranscribeAsync(
@@ -869,12 +868,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StopPreviewCommand.NotifyCanExecuteChanged();
     }
 
-    private void PlayFeedbackSound(SystemSound sound)
+    private void PlayFeedbackSound()
     {
-        if (Settings.Audio.EnableFeedbackSounds)
+        if (!Settings.Audio.EnableFeedbackSounds)
         {
-            sound.Play();
+            return;
         }
+
+        // No platform-neutral sound implementation is wired yet.
     }
 
     private void OnFileTranscriptionTimerTick(object? sender, EventArgs e)

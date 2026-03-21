@@ -52,9 +52,9 @@ public partial class App : Avalonia.Application
             var remoteTranscriptionService = new WebRtcTranscriptionClient(new HttpClient(), logger);
             var recorderService = new SoundFlowRecorderService(paths, logger);
             var audioInputDeviceService = new AudioInputDeviceService();
-            var pasteService = new ClipboardPasteService(logger);
+            var pasteService = PlatformServices.CreatePasteService(logger);
             var filePickerService = new AvaloniaFilePickerService();
-            var audioPreviewService = new MediaPlayerAudioPreviewService();
+            var audioPreviewService = PlatformServices.CreateAudioPreviewService();
 
             _viewModel = new MainViewModel(
                 paths,

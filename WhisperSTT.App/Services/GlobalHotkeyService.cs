@@ -1,9 +1,11 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using WhisperSTT.Core.Models;
 
 namespace WhisperSTT.App.Services;
 
-public sealed class GlobalHotkeyService : IDisposable
+[SupportedOSPlatform("windows")]
+public sealed class GlobalHotkeyService : IGlobalHotkeyService
 {
     private readonly IntPtr _windowHandle;
     private readonly Dictionary<int, string> _actionsById = new();

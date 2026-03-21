@@ -24,8 +24,8 @@ internal static class DesignTimeViewModelFactory
             new WebRtcTranscriptionClient(new HttpClient(), logger),
             new SoundFlowRecorderService(paths, logger),
             new AudioInputDeviceService(),
-            new ClipboardPasteService(logger),
+            PlatformServices.CreatePasteService(logger),
             new AvaloniaFilePickerService(),
-            new MediaPlayerAudioPreviewService());
+            PlatformServices.CreateAudioPreviewService());
     }
 }

@@ -10,7 +10,7 @@ namespace WhisperSTT.App;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
-    private GlobalHotkeyService? _globalHotkeyService;
+    private IGlobalHotkeyService? _globalHotkeyService;
 
     public MainWindow()
     {
@@ -67,12 +67,7 @@ public partial class MainWindow : Window
         }
 
         var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-        if (handle == IntPtr.Zero)
-        {
-            return;
-        }
-
-        _globalHotkeyService = new GlobalHotkeyService(handle);
+        _globalHotkeyService = PlatformServices.CreateGlobalHotkeyService(handle);
         _globalHotkeyService.HotkeyPressed += OnHotkeyPressed;
         _globalHotkeyService.ApplySettings(_viewModel.Settings.Hotkeys);
     }

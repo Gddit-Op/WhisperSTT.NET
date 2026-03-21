@@ -6,15 +6,14 @@ namespace WhisperSTT.App;
 
 internal static class Program
 {
-    private const string SingleInstanceMutexName = @"Local\WhisperSTT.App";
-
     [STAThread]
     public static void Main(string[] args)
     {
-        using var singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var createdNew);
+        var singleInstanceMutexName = PlatformServices.GetSingleInstanceMutexName();
+        using var singleInstanceMutex = new Mutex(initiallyOwned: true, singleInstanceMutexName, out var createdNew);
         if (!createdNew)
         {
-            NativeMethods.MessageBox(IntPtr.Zero, "WhisperSTT is already running.", "WhisperSTT", NativeMethods.MbOk | NativeMethods.MbIconInformation);
+            PlatformServices.NotifyAlreadyRunning();
             return;
         }
 

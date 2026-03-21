@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace WhisperSTT.App.Services;
 
+[SupportedOSPlatform("windows")]
 internal static class NativeMethods
 {
     public const int GwlpWndProc = -4;

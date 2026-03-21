@@ -1,9 +1,11 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using WhisperSTT.Core.Services;
 
 namespace WhisperSTT.App.Services;
 
+[SupportedOSPlatform("windows")]
 public sealed class MediaPlayerAudioPreviewService : IAudioPreviewService
 {
     private const string Alias = "whisper_preview";

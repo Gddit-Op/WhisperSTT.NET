@@ -21,7 +21,7 @@ internal static class PlatformServices
     {
         if (OperatingSystem.IsWindows() && windowHandle != IntPtr.Zero)
         {
-            return new GlobalHotkeyService(windowHandle);
+            return new WindowsGlobalHotkeyService(windowHandle);
         }
 
         return NoOpGlobalHotkeyService.Instance;

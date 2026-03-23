@@ -1,9 +1,6 @@
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Layout;
-using Avalonia.Media;
 using Avalonia.Threading;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
 
 namespace WhisperSTT.App.Services;
 
@@ -44,78 +41,11 @@ internal sealed class AvaloniaMessageDialogService : IMessageDialogService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var closeButton = new Button
-        {
-            Content = "OK",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            MinWidth = 96
-        };
-
-        var dialog = new Window
-        {
-            Title = title,
-            Width = 560,
-            Height = 240,
-            MinWidth = 420,
-            MinHeight = 220,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new StackPanel
-            {
-                Margin = new Thickness(20),
-                Spacing = 14,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = title,
-                        FontSize = 20,
-                        FontWeight = FontWeight.SemiBold
-                    },
-                    new TextBlock
-                    {
-                        Text = message,
-                        TextWrapping = TextWrapping.Wrap
-                    },
-                    closeButton
-                }
-            }
-        };
-
-        closeButton.Click += (_, _) => dialog.Close();
-
-        var owner = ResolveOwnerWindow();
-        if (owner is not null)
-        {
-            await dialog.ShowDialog(owner).ConfigureAwait(true);
-            return;
-        }
-
-        var closeTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        dialog.Closed += (_, _) => closeTcs.TrySetResult();
-        dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        dialog.Show();
-        await closeTcs.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
-    }
-
-    private static Window? ResolveOwnerWindow()
-    {
-        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktopLifetime)
-        {
-            return null;
-        }
-
-        var activeWindow = desktopLifetime.Windows.FirstOrDefault(window => window.IsActive && window.IsVisible);
-        if (activeWindow is not null)
-        {
-            return activeWindow;
-        }
-
-        if (desktopLifetime.MainWindow is { IsVisible: true } mainWindow)
-        {
-            return mainWindow;
-        }
-
-        return null;
+        var dialog = MessageBoxManager.GetMessageBoxStandard(
+            title,
+            message,
+            ButtonEnum.Ok,
+            Icon.Error);
+        await dialog.ShowAsync().WaitAsync(cancellationToken).ConfigureAwait(true);
     }
 }

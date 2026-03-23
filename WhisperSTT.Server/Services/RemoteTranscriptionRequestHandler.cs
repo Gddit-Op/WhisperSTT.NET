@@ -76,7 +76,7 @@ public sealed class RemoteTranscriptionRequestHandler
                     .ConfigureAwait(false);
 
                 return new RemoteTranscriptionResultMessage(
-                    WebRtcProtocolConstants.TranscriptionResultMessageType,
+                    RemoteTranscriptionProtocolConstants.TranscriptionResultMessageType,
                     metadata.RequestId,
                     true,
                     result);
@@ -98,7 +98,7 @@ public sealed class RemoteTranscriptionRequestHandler
                 .ConfigureAwait(false);
 
             return new RemoteTranscriptionResultMessage(
-                WebRtcProtocolConstants.TranscriptionResultMessageType,
+                RemoteTranscriptionProtocolConstants.TranscriptionResultMessageType,
                 metadata.RequestId,
                 false,
                 null,

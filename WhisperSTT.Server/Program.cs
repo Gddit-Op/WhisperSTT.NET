@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, WebRtcServerJsonContext.Default);
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, RemoteTranscriptionServerJsonContext.Default);
 });
 
 var configuredOptions = builder.Configuration
@@ -46,11 +46,11 @@ app.MapGet(
     "/",
     () => Results.Ok(new ServerStatusResponse(
         "WhisperSTT.Server",
-        WebRtcProtocolConstants.TranscriptionEndpoint,
+        RemoteTranscriptionProtocolConstants.TranscriptionEndpoint,
         paths.RootDirectory)));
 
 app.MapPost(
-    WebRtcProtocolConstants.TranscriptionEndpoint,
+    RemoteTranscriptionProtocolConstants.TranscriptionEndpoint,
     async (HttpRequest request, RemoteTranscriptionRequestHandler handler, IActivityLogService activityLogService, CancellationToken cancellationToken) =>
     {
         try
@@ -69,7 +69,7 @@ app.MapPost(
 
             var metadata = JsonSerializer.Deserialize(
                 metadataJson,
-                WebRtcServerJsonContext.Default.RemoteTranscriptionStartMessage);
+                RemoteTranscriptionServerJsonContext.Default.RemoteTranscriptionStartMessage);
             if (metadata is null || !metadata.IsValid)
             {
                 return Results.BadRequest("Invalid metadata payload.");

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace WhisperSTT.Core.Models;
 
 public enum AppStatus
@@ -37,7 +39,7 @@ public enum WhisperRuntimePreference
 public enum TranscriptionTarget
 {
     Local,
-    WebRtc
+    Server
 }
 
 public enum RemoteTranscriptionAudioFormat

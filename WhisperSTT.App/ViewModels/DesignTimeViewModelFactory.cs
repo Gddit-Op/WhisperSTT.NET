@@ -21,7 +21,7 @@ internal static class DesignTimeViewModelFactory
             new TranscriptHistoryService(paths),
             new WhisperModelService(paths),
             new WhisperTranscriptionService(logger),
-            new WebRtcTranscriptionClient(new HttpClient(), logger),
+            new RemoteServerTranscriptionClient(new HttpClient(), logger),
             new SoundFlowRecorderService(paths, logger),
             new AudioInputDeviceService(),
             PlatformServices.CreatePasteService(logger),

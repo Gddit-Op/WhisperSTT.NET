@@ -33,7 +33,7 @@ public sealed class AudioSettings
 
 public sealed class TranscriptionSettings
 {
-    public TranscriptionTarget Target { get; set; } = TranscriptionTarget.WebRtc;
+    public TranscriptionTarget Target { get; set; } = TranscriptionTarget.Server;
 
     public LanguageMode LanguageMode { get; set; } = LanguageMode.Auto;
 
@@ -52,8 +52,6 @@ public sealed class TranscriptionSettings
     public string OpenVinoRuntimePath { get; set; } = string.Empty;
 
     public string RemoteServerUrl { get; set; } = "http://localhost:5177";
-
-    public string WebRtcIceServerUrl { get; set; } = string.Empty;
 
     public int RemoteTimeoutSeconds { get; set; } = 300;
 

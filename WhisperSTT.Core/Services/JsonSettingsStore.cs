@@ -24,17 +24,22 @@ public sealed class JsonSettingsStore : ISettingsStore
             return defaults;
         }
 
-        await using var stream = File.OpenRead(ConfigPath);
-        var settings = await JsonSerializer.DeserializeAsync<AppSettings>(
-            stream,
-            AppSettingsJsonContext.Default.AppSettings,
-            cancellationToken).ConfigureAwait(false);
+        var rawJson = await File.ReadAllTextAsync(ConfigPath, cancellationToken).ConfigureAwait(false);
+        var normalizedJson = NormalizeLegacySettingsJson(rawJson);
+        var settings = JsonSerializer.Deserialize(
+            normalizedJson,
+            AppSettingsJsonContext.Default.AppSettings);
 
         if (settings is null)
         {
             var defaults = new AppSettings();
             await SaveAsync(defaults, cancellationToken).ConfigureAwait(false);
             return defaults;
+        }
+
+        if (!string.Equals(rawJson, normalizedJson, StringComparison.Ordinal))
+        {
+            await SaveAsync(settings, cancellationToken).ConfigureAwait(false);
         }
 
         return settings;
@@ -46,5 +51,12 @@ public sealed class JsonSettingsStore : ISettingsStore
         await using var stream = File.Create(ConfigPath);
         await JsonSerializer.SerializeAsync(stream, settings, AppSettingsJsonContext.Default.AppSettings, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private static string NormalizeLegacySettingsJson(string json)
+    {
+        return json
+            .Replace("\"WebRtc\"", "\"Server\"", StringComparison.Ordinal)
+            .Replace("\"WebRtcIceServerUrl\"", "\"LegacyWebRtcIceServerUrl\"", StringComparison.Ordinal);
     }
 }

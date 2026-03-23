@@ -248,7 +248,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool IsRemoteTranscription => SelectedTranscriptionTarget == TranscriptionTarget.WebRtc;
+    public bool IsRemoteTranscription => SelectedTranscriptionTarget == TranscriptionTarget.Server;
 
     public string RemoteServerUrl
     {
@@ -264,21 +264,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             OnPropertyChanged();
             OnPropertyChanged(nameof(ActiveModelSummary));
             OnPropertyChanged(nameof(TranscriptionModeSummary));
-        }
-    }
-
-    public string WebRtcIceServerUrl
-    {
-        get => Settings.Transcription.WebRtcIceServerUrl;
-        set
-        {
-            if (string.Equals(Settings.Transcription.WebRtcIceServerUrl, value, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            Settings.Transcription.WebRtcIceServerUrl = value;
-            OnPropertyChanged();
         }
     }
 
@@ -552,7 +537,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             preset,
             sourceType,
             RemoteServerUrl,
-            WebRtcIceServerUrl,
             RemoteTimeoutSeconds)).ConfigureAwait(true);
 
         var audioSourceDescription = audioCapture.AudioSamples is { Length: > 0 }
@@ -566,7 +550,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ? "unknown"
             : result.UsedRuntime;
         var transportText = IsRemoteTranscription
-            ? $"remote WebRTC server {RemoteServerUrl}"
+            ? $"remote HTTP server {RemoteServerUrl}"
             : "local in-process engine";
         var modelDescription = IsRemoteTranscription
             ? $"requested preset {preset}"

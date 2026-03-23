@@ -49,7 +49,7 @@ public partial class App : Avalonia.Application
             var history = new TranscriptHistoryService(paths);
             var modelManager = new WhisperModelService(paths);
             var localTranscriptionService = new WhisperTranscriptionService(logger);
-            var remoteTranscriptionService = new WebRtcTranscriptionClient(new HttpClient(), logger);
+            var remoteTranscriptionService = new RemoteServerTranscriptionClient(new HttpClient(), logger);
             var recorderService = new SoundFlowRecorderService(paths, logger);
             var audioInputDeviceService = new AudioInputDeviceService();
             var pasteService = PlatformServices.CreatePasteService(logger);

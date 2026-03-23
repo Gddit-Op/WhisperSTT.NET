@@ -36,7 +36,7 @@
                      FontSize="14"
                      Foreground="{StaticResource TextBrush}"
                      Opacity="0.75"
-                     Text="Desktop capture with server-side Whisper transcription over WebRTC." />
+                     Text="Desktop capture with server-side Whisper transcription over HTTP." />
         </StackPanel>
 
         <StackPanel Grid.Column="1"
@@ -281,7 +281,7 @@
                              TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"
-                             Text="When Execution Target is WebRtc, the desktop app uploads audio to the server over HTTP. The server performs transcription with its own configured Whisper model, runtime, language mode, and thread counts from appsettings.json."
+                             Text="When Execution Target is Server, the desktop app uploads audio to the server over HTTP. The server performs transcription with its own configured Whisper model, runtime, language mode, and thread counts from appsettings.json."
                              TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"

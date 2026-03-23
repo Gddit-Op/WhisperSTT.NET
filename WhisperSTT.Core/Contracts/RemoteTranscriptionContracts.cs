@@ -3,7 +3,7 @@ using WhisperSTT.Core.Models;
 
 namespace WhisperSTT.Core.Contracts;
 
-public static class WebRtcProtocolConstants
+public static class RemoteTranscriptionProtocolConstants
 {
     public const string TranscriptionEndpoint = "/api/transcriptions";
     public const string TranscriptionStartMessageType = "transcription-start";
@@ -29,7 +29,7 @@ public sealed record RemoteTranscriptionStartMessage(
     int Channels = 0)
 {
     [JsonIgnore]
-    public bool IsValid => string.Equals(MessageType, WebRtcProtocolConstants.TranscriptionStartMessageType, StringComparison.Ordinal);
+    public bool IsValid => string.Equals(MessageType, RemoteTranscriptionProtocolConstants.TranscriptionStartMessageType, StringComparison.Ordinal);
 }
 
 public sealed record RemoteTranscriptionResultMessage(
@@ -40,5 +40,5 @@ public sealed record RemoteTranscriptionResultMessage(
     string ErrorMessage = "")
 {
     [JsonIgnore]
-    public bool IsValid => string.Equals(MessageType, WebRtcProtocolConstants.TranscriptionResultMessageType, StringComparison.Ordinal);
+    public bool IsValid => string.Equals(MessageType, RemoteTranscriptionProtocolConstants.TranscriptionResultMessageType, StringComparison.Ordinal);
 }

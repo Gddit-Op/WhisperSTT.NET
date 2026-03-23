@@ -26,7 +26,6 @@ public sealed record TranscriptionRequest(
     ModelPreset RequestedModelPreset = ModelPreset.Small,
     RemoteTranscriptionSourceType SourceType = RemoteTranscriptionSourceType.Recording,
     string RemoteServerUrl = "",
-    string WebRtcIceServerUrl = "",
     int RemoteTimeoutSeconds = 300);
 
 public sealed record TranscriptionSegment(TimeSpan Start, TimeSpan End, string Text);

@@ -104,15 +104,15 @@ Notes:
 - `CommunityToolkit.Mvvm`
 - `NAudio` for microphone capture and audio handling
 - `Whisper.net` for offline Whisper inference
-- `SIPSorcery` for WebRTC peer connections and data channels
+- `ASP.NET Core` for the standalone remote transcription server
 
 ## Solution Layout
 
 - `WhisperSTTClassic.sln`: main solution file to use
 - `WhisperSTT.App`: Avalonia tray application and Windows-specific integrations
-- `WhisperSTT.Client`: reusable WebRTC transcription client library
+- `WhisperSTT.Client`: reusable remote transcription client library
 - `WhisperSTT.Core`: settings, models, paths, and service contracts
-- `WhisperSTT.Server`: ASP.NET Core host for WebRTC signaling and remote Whisper transcription
+- `WhisperSTT.Server`: ASP.NET Core host for remote Whisper transcription
 - `Task.md`: original product/task specification
 
 ## Build
@@ -146,14 +146,14 @@ Server configuration is read from `WhisperSTT.Server/appsettings.json`.
 
 ## Remote Transcription
 
-When `Execution Target` is set to `WebRtc` in the desktop app, audio is sent to `WhisperSTT.Server` over a WebRTC data channel.
+When `Execution Target` is set to `Server` in the desktop app, audio is uploaded to `WhisperSTT.Server` over HTTP.
 
-- Signaling uses `POST /api/webrtc/sessions`
+- Requests use `POST /api/transcriptions` with `multipart/form-data`
 - The client sends audio bytes or float32 capture buffers plus source metadata for `Recording` vs `File`
 - By default the server ignores client Whisper settings and uses the standalone `Whisper` section from `WhisperSTT.Server/appsettings.json`
 - The server can use separate `RecordingModelPreset` / `FileModelPreset` and thread counts based on the incoming source type
 - By default the server uses `%APPDATA%\WhisperNET.Server` and writes its own log to `%APPDATA%\WhisperNET.Server\server.log`
-- New configurations default to `WebRtc`, so transcription runs on the server unless you explicitly switch back to `Local`
+- New configurations default to `Server`, so transcription runs on the server unless you explicitly switch back to `Local`
 
 Publish a Windows desktop build:
 

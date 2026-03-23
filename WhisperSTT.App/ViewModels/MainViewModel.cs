@@ -363,7 +363,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public string TranscriptionModeSummary => IsRemoteTranscription
-        ? $"Remote WebRTC transcription server: {RemoteServerUrl}"
+        ? $"Remote HTTP transcription server: {RemoteServerUrl}"
         : "Local in-process transcription using Whisper.NET";
 
     public string PersistenceSummary =>

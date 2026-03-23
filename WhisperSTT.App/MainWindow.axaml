@@ -273,8 +273,6 @@
                   </Grid>
                   <TextBlock Margin="0,16,0,4" Text="Remote Server URL" />
                   <TextBox Text="{Binding RemoteServerUrl}" />
-                  <TextBlock Margin="0,16,0,4" Text="ICE Server URL (optional)" />
-                  <TextBox Text="{Binding WebRtcIceServerUrl}" />
                   <TextBlock Margin="0,16,0,4" Text="Remote Timeout (seconds)" />
                   <TextBox Text="{Binding RemoteTimeoutSeconds}" />
                   <TextBlock Margin="0,8,0,0"
@@ -283,7 +281,7 @@
                              TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"
-                             Text="When Execution Target is WebRtc, the desktop app sends audio over a WebRTC data channel. The server performs transcription with its own configured Whisper model, runtime, language mode, and thread counts from appsettings.json."
+                             Text="When Execution Target is WebRtc, the desktop app uploads audio to the server over HTTP. The server performs transcription with its own configured Whisper model, runtime, language mode, and thread counts from appsettings.json."
                              TextWrapping="Wrap" />
                   <TextBlock Margin="0,12,0,0"
                              Opacity="0.7"

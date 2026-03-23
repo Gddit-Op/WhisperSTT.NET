@@ -1,7 +1,9 @@
 using WhisperSTT.Core.Contracts;
+using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
 using WhisperSTT.Server.Configuration;
 using WhisperSTT.Server.Services;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,7 +38,7 @@ builder.Services.AddSingleton(configuredOptions);
 builder.Services.AddSingleton(whisperOptions);
 builder.Services.AddSingleton<WhisperModelService>();
 builder.Services.AddSingleton<WhisperServerTranscriptionService>();
-builder.Services.AddSingleton<WebRtcSessionRegistry>();
+builder.Services.AddSingleton<RemoteTranscriptionRequestHandler>();
 
 var app = builder.Build();
 
@@ -44,25 +46,57 @@ app.MapGet(
     "/",
     () => Results.Ok(new ServerStatusResponse(
         "WhisperSTT.Server",
-        WebRtcProtocolConstants.SessionEndpoint,
+        WebRtcProtocolConstants.TranscriptionEndpoint,
         paths.RootDirectory)));
 
 app.MapPost(
-    WebRtcProtocolConstants.SessionEndpoint,
-    async (WebRtcOfferRequest request, WebRtcSessionRegistry registry, IActivityLogService activityLogService, CancellationToken cancellationToken) =>
+    WebRtcProtocolConstants.TranscriptionEndpoint,
+    async (HttpRequest request, RemoteTranscriptionRequestHandler handler, IActivityLogService activityLogService, CancellationToken cancellationToken) =>
     {
         try
         {
-            var response = await registry.CreateSessionAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!request.HasFormContentType)
+            {
+                return Results.BadRequest("Expected multipart/form-data.");
+            }
+
+            var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+            var metadataJson = form["metadata"].ToString();
+            if (string.IsNullOrWhiteSpace(metadataJson))
+            {
+                return Results.BadRequest("Missing metadata field.");
+            }
+
+            var metadata = JsonSerializer.Deserialize(
+                metadataJson,
+                WebRtcServerJsonContext.Default.RemoteTranscriptionStartMessage);
+            if (metadata is null || !metadata.IsValid)
+            {
+                return Results.BadRequest("Invalid metadata payload.");
+            }
+
+            var payloadFile = form.Files.GetFile("payload");
+            if (payloadFile is null)
+            {
+                return Results.BadRequest("Missing payload file.");
+            }
+
+            await using var payloadStream = payloadFile.OpenReadStream();
+            using var memoryStream = new MemoryStream();
+            await payloadStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+
+            var response = await handler
+                .ProcessAsync(metadata, memoryStream.ToArray(), cancellationToken)
+                .ConfigureAwait(false);
             return Results.Ok(response);
         }
         catch (Exception exception)
         {
             await activityLogService
-                .WriteAsync($"WebRTC session creation failed: {exception.GetType().Name}: {exception}")
+                .WriteAsync($"Remote transcription request failed: {exception.GetType().Name}: {exception}")
                 .ConfigureAwait(false);
             return Results.Problem(
-                title: "WebRTC session creation failed",
+                title: "Remote transcription request failed",
                 detail: exception.Message,
                 statusCode: StatusCodes.Status500InternalServerError);
         }

@@ -5,25 +5,10 @@ namespace WhisperSTT.Core.Contracts;
 
 public static class WebRtcProtocolConstants
 {
-    public const string DefaultChannelLabel = "whisper-stt";
-    public const ushort DefaultChannelId = 0;
-    public const string SessionEndpoint = "/api/webrtc/sessions";
+    public const string TranscriptionEndpoint = "/api/transcriptions";
     public const string TranscriptionStartMessageType = "transcription-start";
-    public const string TranscriptionEndMessageType = "transcription-end";
     public const string TranscriptionResultMessageType = "transcription-result";
-    public const int DefaultChunkSize = 16 * 1024;
 }
-
-public sealed record WebRtcSessionDescription(string Type, string Sdp);
-
-public sealed record WebRtcOfferRequest(
-    WebRtcSessionDescription Offer,
-    string? IceServerUrl = null,
-    string ChannelLabel = WebRtcProtocolConstants.DefaultChannelLabel);
-
-public sealed record WebRtcOfferResponse(
-    Guid SessionId,
-    WebRtcSessionDescription Answer);
 
 public sealed record RemoteTranscriptionStartMessage(
     string MessageType,
@@ -45,14 +30,6 @@ public sealed record RemoteTranscriptionStartMessage(
 {
     [JsonIgnore]
     public bool IsValid => string.Equals(MessageType, WebRtcProtocolConstants.TranscriptionStartMessageType, StringComparison.Ordinal);
-}
-
-public sealed record RemoteTranscriptionEndMessage(
-    string MessageType,
-    string RequestId)
-{
-    [JsonIgnore]
-    public bool IsValid => string.Equals(MessageType, WebRtcProtocolConstants.TranscriptionEndMessageType, StringComparison.Ordinal);
 }
 
 public sealed record RemoteTranscriptionResultMessage(

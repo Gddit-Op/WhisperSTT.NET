@@ -8,11 +8,7 @@ namespace WhisperSTT.Server.Services;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(ServerStatusResponse))]
-[JsonSerializable(typeof(WebRtcSessionDescription))]
-[JsonSerializable(typeof(WebRtcOfferRequest))]
-[JsonSerializable(typeof(WebRtcOfferResponse))]
 [JsonSerializable(typeof(RemoteTranscriptionStartMessage))]
-[JsonSerializable(typeof(RemoteTranscriptionEndMessage))]
 [JsonSerializable(typeof(RemoteTranscriptionResultMessage))]
 [JsonSerializable(typeof(TranscriptionResult))]
 [JsonSerializable(typeof(TranscriptionSegment))]
@@ -23,5 +19,5 @@ internal sealed partial class WebRtcServerJsonContext : JsonSerializerContext
 
 internal sealed record ServerStatusResponse(
     string Service,
-    string SignalingEndpoint,
+    string TranscriptionEndpoint,
     string DataRoot);

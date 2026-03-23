@@ -7,7 +7,7 @@ using WhisperSTT.Core.Services;
 
 namespace WhisperSTT.Client.Services;
 
-public sealed class RemoteServerTranscriptionClient : ITranscriptionService, IDisposable
+public sealed class RemoteServerTranscriptionClient : ITranscriptionService, IRemoteServerConnectionService, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly IActivityLogService? _activityLogService;
@@ -97,6 +97,26 @@ public sealed class RemoteServerTranscriptionClient : ITranscriptionService, IDi
         _requestGate.Dispose();
     }
 
+    public async Task ValidateConnectionAsync(
+        string remoteServerUrl,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var endpoint = BuildServerStatusEndpoint(remoteServerUrl);
+        using var response = await _httpClient.GetAsync(endpoint, cancellationToken).ConfigureAwait(false);
+        if (response.IsSuccessStatusCode)
+        {
+            await TryLogAsync($"Validated remote server connection to {endpoint}.").ConfigureAwait(false);
+            return;
+        }
+
+        throw new HttpRequestException(
+            $"The remote server returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}).",
+            null,
+            response.StatusCode);
+    }
+
     private async Task<RemoteTranscriptionResultMessage> PostTranscriptionAsync(
         string remoteServerUrl,
         RemoteTranscriptionStartMessage metadata,
@@ -157,10 +177,20 @@ public sealed class RemoteServerTranscriptionClient : ITranscriptionService, IDi
 
     private static Uri BuildTranscriptionEndpoint(string remoteServerUrl)
     {
-        var baseUri = remoteServerUrl.EndsWith("/", StringComparison.Ordinal)
+        var baseUri = BuildServerStatusEndpoint(remoteServerUrl);
+        return new Uri(baseUri, RemoteTranscriptionProtocolConstants.TranscriptionEndpoint.TrimStart('/'));
+    }
+
+    private static Uri BuildServerStatusEndpoint(string remoteServerUrl)
+    {
+        if (string.IsNullOrWhiteSpace(remoteServerUrl))
+        {
+            throw new InvalidOperationException("Remote server URL is required.");
+        }
+
+        return remoteServerUrl.EndsWith("/", StringComparison.Ordinal)
             ? new Uri(remoteServerUrl, UriKind.Absolute)
             : new Uri($"{remoteServerUrl}/", UriKind.Absolute);
-        return new Uri(baseUri, RemoteTranscriptionProtocolConstants.TranscriptionEndpoint.TrimStart('/'));
     }
 
     private Task TryLogAsync(string message)

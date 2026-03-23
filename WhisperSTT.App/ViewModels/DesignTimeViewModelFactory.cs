@@ -12,6 +12,7 @@ internal static class DesignTimeViewModelFactory
         var paths = new ApplicationPaths();
         var settings = new AppSettings();
         var logger = new FileActivityLogService(paths);
+        var remoteTranscriptionService = new RemoteServerTranscriptionClient(new HttpClient(), logger);
 
         return new MainViewModel(
             paths,
@@ -21,11 +22,13 @@ internal static class DesignTimeViewModelFactory
             new TranscriptHistoryService(paths),
             new WhisperModelService(paths),
             new WhisperTranscriptionService(logger),
-            new RemoteServerTranscriptionClient(new HttpClient(), logger),
+            remoteTranscriptionService,
+            remoteTranscriptionService,
             new SoundFlowRecorderService(paths, logger),
             new AudioInputDeviceService(),
             PlatformServices.CreatePasteService(logger),
             new AvaloniaFilePickerService(),
-            PlatformServices.CreateAudioPreviewService());
+            PlatformServices.CreateAudioPreviewService(),
+            new AvaloniaMessageDialogService());
     }
 }

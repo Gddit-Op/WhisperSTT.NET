@@ -18,6 +18,13 @@ public interface ITranscriptionService
         CancellationToken cancellationToken = default);
 }
 
+public interface IRemoteServerConnectionService
+{
+    Task ValidateConnectionAsync(
+        string remoteServerUrl,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IAudioRecorderService
 {
     bool IsRecording { get; }

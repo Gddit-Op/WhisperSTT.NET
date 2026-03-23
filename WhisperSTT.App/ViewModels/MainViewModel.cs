@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using AvaloniaBrushes = Avalonia.Media.Brushes;
+using WhisperSTT.App.Services;
 using WhisperSTT.Core.Models;
 using WhisperSTT.Core.Services;
 
@@ -19,11 +20,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly IModelManagementService _modelManagementService;
     private readonly ITranscriptionService _localTranscriptionService;
     private readonly ITranscriptionService _remoteTranscriptionService;
+    private readonly IRemoteServerConnectionService _remoteServerConnectionService;
     private readonly IAudioRecorderService _audioRecorderService;
     private readonly IAudioInputDeviceService _audioInputDeviceService;
     private readonly IPasteService _pasteService;
     private readonly IFilePickerService _filePickerService;
     private readonly IAudioPreviewService _audioPreviewService;
+    private readonly IMessageDialogService _messageDialogService;
     private readonly Stopwatch _fileTranscriptionStopwatch = new();
     private readonly DispatcherTimer _fileTranscriptionTimer;
     private AppStatus _status = AppStatus.Idle;
@@ -34,6 +37,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _selectedFilePath;
     private string _lastError = "No errors.";
     private string _lastDetectedLanguage = "unknown";
+    private string _lastSavedRemoteServerUrl;
     private IReadOnlyList<AudioInputDeviceOption> _inputDevices = [];
     private AudioInputDeviceOption? _selectedInputDevice;
 
@@ -46,11 +50,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IModelManagementService modelManagementService,
         ITranscriptionService localTranscriptionService,
         ITranscriptionService remoteTranscriptionService,
+        IRemoteServerConnectionService remoteServerConnectionService,
         IAudioRecorderService audioRecorderService,
         IAudioInputDeviceService audioInputDeviceService,
         IPasteService pasteService,
         IFilePickerService filePickerService,
-        IAudioPreviewService audioPreviewService)
+        IAudioPreviewService audioPreviewService,
+        IMessageDialogService messageDialogService)
     {
         _paths = paths;
         Settings = settings;
@@ -60,17 +66,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _modelManagementService = modelManagementService;
         _localTranscriptionService = localTranscriptionService;
         _remoteTranscriptionService = remoteTranscriptionService;
+        _remoteServerConnectionService = remoteServerConnectionService;
         _audioRecorderService = audioRecorderService;
         _audioInputDeviceService = audioInputDeviceService;
         _pasteService = pasteService;
         _filePickerService = filePickerService;
         _audioPreviewService = audioPreviewService;
+        _messageDialogService = messageDialogService;
         _fileTranscriptionTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _fileTranscriptionTimer.Tick += OnFileTranscriptionTimerTick;
         _selectedFilePath = settings.Transcription.LastFilePath;
+        _lastSavedRemoteServerUrl = settings.Transcription.RemoteServerUrl;
 
         ToggleRecordingCommand = new AsyncRelayCommand(ToggleRecordingAsync, () => Status != AppStatus.Transcribing);
         CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording || _audioRecorderService.IsRecording);
@@ -394,12 +403,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
+            var remoteServerUrlChanged = !string.Equals(
+                _lastSavedRemoteServerUrl,
+                Settings.Transcription.RemoteServerUrl,
+                StringComparison.Ordinal);
+
             await _settingsStore.SaveAsync(Settings).ConfigureAwait(true);
             HotkeysChanged?.Invoke(this, EventArgs.Empty);
             OnPropertyChanged(nameof(ActiveModelSummary));
             OnPropertyChanged(nameof(PersistenceSummary));
             LastError = "Settings saved.";
             await LogAsync("Settings saved.").ConfigureAwait(true);
+            _lastSavedRemoteServerUrl = Settings.Transcription.RemoteServerUrl;
+
+            if (remoteServerUrlChanged || IsRemoteTranscription)
+            {
+                await ValidateRemoteServerAfterSaveAsync(remoteServerUrlChanged).ConfigureAwait(true);
+            }
         }
         catch (Exception exception)
         {
@@ -787,6 +807,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         await LogAsync($"Error: {exception}").ConfigureAwait(true);
+
+        if (IsRemoteTranscription && IsRemoteServerError(exception))
+        {
+            await _messageDialogService.ShowErrorAsync(
+                    "Remote Server Error",
+                    CreateRemoteServerDialogMessage("sending the transcription request", exception))
+                .ConfigureAwait(true);
+        }
     }
 
     private void UpdateDetectedLanguage(string? detectedLanguage)
@@ -830,6 +858,63 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         return $"{prefix}: {message}";
+    }
+
+    private async Task ValidateRemoteServerAfterSaveAsync(bool remoteServerUrlChanged)
+    {
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(1, RemoteTimeoutSeconds)));
+
+        try
+        {
+            await _remoteServerConnectionService
+                .ValidateConnectionAsync(RemoteServerUrl, timeoutCts.Token)
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            LastError = remoteServerUrlChanged
+                ? "Settings saved, but the new remote server URL is not reachable."
+                : "Settings saved, but the remote server is not reachable.";
+            await LogAsync($"Remote server validation failed: {exception}").ConfigureAwait(true);
+            await _messageDialogService.ShowErrorAsync(
+                    "Remote Server Error",
+                    CreateRemoteServerDialogMessage("validating the saved remote server URL", exception))
+                .ConfigureAwait(true);
+        }
+    }
+
+    private bool IsRemoteServerError(Exception exception)
+    {
+        var baseException = exception.GetBaseException();
+        return baseException is HttpRequestException
+            or TaskCanceledException
+            or UriFormatException
+            or InvalidOperationException;
+    }
+
+    private string CreateRemoteServerDialogMessage(string operation, Exception exception)
+    {
+        var serverUrl = string.IsNullOrWhiteSpace(RemoteServerUrl)
+            ? "<empty>"
+            : RemoteServerUrl;
+        var baseException = exception.GetBaseException();
+
+        return baseException switch
+        {
+            InvalidOperationException invalidOperationException when
+                invalidOperationException.Message.Contains("Remote server URL is required.", StringComparison.OrdinalIgnoreCase) =>
+                "The remote server URL is empty. Enter a valid URL such as http://localhost:5177 and try again.",
+            UriFormatException =>
+                $"The remote server URL '{serverUrl}' is invalid. Enter a valid absolute URL such as http://localhost:5177.",
+            TaskCanceledException =>
+                $"Could not reach the remote server at '{serverUrl}' while {operation}. The request timed out after {Math.Max(1, RemoteTimeoutSeconds)} seconds.",
+            HttpRequestException httpRequestException when httpRequestException.StatusCode is { } statusCode =>
+                $"The remote server at '{serverUrl}' returned HTTP {(int)statusCode} ({statusCode}) while {operation}.",
+            HttpRequestException =>
+                $"Could not reach the remote server at '{serverUrl}' while {operation}. Check whether the server is running and the URL is correct.",
+            _ =>
+                $"The remote server at '{serverUrl}' failed while {operation}.{Environment.NewLine}{baseException.Message}"
+        };
     }
 
     private void SetStatus(AppStatus status, string text)

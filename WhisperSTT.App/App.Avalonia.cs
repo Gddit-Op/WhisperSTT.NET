@@ -55,6 +55,7 @@ public partial class App : Avalonia.Application
             var pasteService = PlatformServices.CreatePasteService(logger);
             var filePickerService = new AvaloniaFilePickerService();
             var audioPreviewService = PlatformServices.CreateAudioPreviewService();
+            var messageDialogService = new AvaloniaMessageDialogService();
 
             _viewModel = new MainViewModel(
                 paths,
@@ -65,11 +66,13 @@ public partial class App : Avalonia.Application
                 modelManager,
                 localTranscriptionService,
                 remoteTranscriptionService,
+                remoteTranscriptionService,
                 recorderService,
                 audioInputDeviceService,
                 pasteService,
                 filePickerService,
-                audioPreviewService);
+                audioPreviewService,
+                messageDialogService);
 
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 

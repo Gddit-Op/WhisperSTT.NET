@@ -869,6 +869,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await _remoteServerConnectionService
                 .ValidateConnectionAsync(RemoteServerUrl, timeoutCts.Token)
                 .ConfigureAwait(true);
+
+            await _messageDialogService.ShowInfoAsync(
+                    "Remote Server Connection",
+                    $"Connection to the remote server was successful.{Environment.NewLine}{RemoteServerUrl}")
+                .ConfigureAwait(true);
         }
         catch (Exception exception)
         {

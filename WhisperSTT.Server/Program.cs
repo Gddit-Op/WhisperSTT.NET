@@ -49,10 +49,23 @@ app.MapGet(
 
 app.MapPost(
     WebRtcProtocolConstants.SessionEndpoint,
-    async (WebRtcOfferRequest request, WebRtcSessionRegistry registry, CancellationToken cancellationToken) =>
+    async (WebRtcOfferRequest request, WebRtcSessionRegistry registry, IActivityLogService activityLogService, CancellationToken cancellationToken) =>
     {
-        var response = await registry.CreateSessionAsync(request, cancellationToken).ConfigureAwait(false);
-        return Results.Ok(response);
+        try
+        {
+            var response = await registry.CreateSessionAsync(request, cancellationToken).ConfigureAwait(false);
+            return Results.Ok(response);
+        }
+        catch (Exception exception)
+        {
+            await activityLogService
+                .WriteAsync($"WebRTC session creation failed: {exception.GetType().Name}: {exception}")
+                .ConfigureAwait(false);
+            return Results.Problem(
+                title: "WebRTC session creation failed",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
     });
 
 app.Run();

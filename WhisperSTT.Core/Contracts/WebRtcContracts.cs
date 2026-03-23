@@ -6,6 +6,7 @@ namespace WhisperSTT.Core.Contracts;
 public static class WebRtcProtocolConstants
 {
     public const string DefaultChannelLabel = "whisper-stt";
+    public const ushort DefaultChannelId = 0;
     public const string SessionEndpoint = "/api/webrtc/sessions";
     public const string TranscriptionStartMessageType = "transcription-start";
     public const string TranscriptionEndMessageType = "transcription-end";

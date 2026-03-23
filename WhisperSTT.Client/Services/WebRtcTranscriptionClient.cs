@@ -71,6 +71,9 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
                 request.AudioChannels);
 
             SendJson(startMessage);
+            await TryLogAsync(
+                $"Sent remote transcription start request {requestId} ({request.SourceType}, {payload.AudioFormat}, {payload.Bytes.LongLength} bytes).")
+                .ConfigureAwait(false);
 
             foreach (var chunk in Chunk(payload.Bytes, WebRtcProtocolConstants.DefaultChunkSize))
             {
@@ -81,6 +84,7 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
             SendJson(new RemoteTranscriptionEndMessage(
                 WebRtcProtocolConstants.TranscriptionEndMessageType,
                 requestId));
+            await TryLogAsync($"Sent remote transcription end request {requestId}.").ConfigureAwait(false);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, request.RemoteTimeoutSeconds)));
@@ -92,10 +96,12 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
                     : response.ErrorMessage);
             }
 
+            await TryLogAsync($"Received remote transcription result for {requestId}.").ConfigureAwait(false);
             return response.Result;
         }
-        catch
+        catch (Exception exception)
         {
+            await TryLogAsync($"WebRTC transcription failed: {exception.GetType().Name}: {exception.Message}").ConfigureAwait(false);
             await ResetConnectionAsync().ConfigureAwait(false);
             throw;
         }
@@ -140,7 +146,16 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
 
         var peerConnection = new RTCPeerConnection(CreateConfiguration(request.WebRtcIceServerUrl));
         var openSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var dataChannel = await peerConnection.createDataChannel(WebRtcProtocolConstants.DefaultChannelLabel).ConfigureAwait(false);
+        var dataChannel = await peerConnection.createDataChannel(
+            WebRtcProtocolConstants.DefaultChannelLabel,
+            new RTCDataChannelInit
+            {
+                negotiated = true,
+                id = WebRtcProtocolConstants.DefaultChannelId
+            }).ConfigureAwait(false);
+        await TryLogAsync(
+            $"Configured negotiated WebRTC data channel '{WebRtcProtocolConstants.DefaultChannelLabel}' with id {WebRtcProtocolConstants.DefaultChannelId}.")
+            .ConfigureAwait(false);
 
         AttachPeerConnection(peerConnection, openSource);
         AttachDataChannel(dataChannel, openSource);
@@ -148,10 +163,13 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
         var offer = peerConnection.createOffer(null);
         await peerConnection.setLocalDescription(offer).ConfigureAwait(false);
         await WaitForIceGatheringCompleteAsync(peerConnection, cancellationToken).ConfigureAwait(false);
+        var localOffer = peerConnection.localDescription;
+        var offerType = localOffer is null ? offer.type.ToString() : localOffer.type.ToString();
+        var offerSdp = localOffer is null ? offer.sdp : localOffer.sdp.ToString();
 
         var endpoint = BuildSessionEndpoint(request.RemoteServerUrl);
         var offerResponse = await PostOfferAsync(endpoint, new WebRtcOfferRequest(
-            new WebRtcSessionDescription(offer.type.ToString(), offer.sdp),
+            new WebRtcSessionDescription(offerType, offerSdp),
             request.WebRtcIceServerUrl)).ConfigureAwait(false);
 
         var answer = new RTCSessionDescriptionInit
@@ -186,6 +204,7 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
     {
         peerConnection.onconnectionstatechange += state =>
         {
+            _ = TryLogAsync($"WebRTC peer connection state changed to {state}.");
             if (state.ToString().Equals("failed", StringComparison.OrdinalIgnoreCase) ||
                 state.ToString().Equals("closed", StringComparison.OrdinalIgnoreCase) ||
                 state.ToString().Equals("disconnected", StringComparison.OrdinalIgnoreCase))
@@ -193,17 +212,30 @@ public sealed class WebRtcTranscriptionClient : ITranscriptionService, IDisposab
                 openSource.TrySetException(new InvalidOperationException($"WebRTC connection closed: {state}."));
             }
         };
+        peerConnection.oniceconnectionstatechange += state =>
+            _ = TryLogAsync($"WebRTC ICE connection state changed to {state}.");
+        peerConnection.onicegatheringstatechange += state =>
+            _ = TryLogAsync($"WebRTC ICE gathering state changed to {state}.");
 
         peerConnection.ondatachannel += channel => AttachDataChannel(channel, openSource);
     }
 
     private void AttachDataChannel(RTCDataChannel dataChannel, TaskCompletionSource<bool> openSource)
     {
-        dataChannel.onopen += () => openSource.TrySetResult(true);
-        dataChannel.onclose += () => openSource.TrySetException(new InvalidOperationException("WebRTC data channel closed."));
+        dataChannel.onopen += () =>
+        {
+            _ = TryLogAsync($"WebRTC data channel '{dataChannel.label}' opened.");
+            openSource.TrySetResult(true);
+        };
+        dataChannel.onclose += () =>
+        {
+            _ = TryLogAsync($"WebRTC data channel '{dataChannel.label}' closed.");
+            openSource.TrySetException(new InvalidOperationException("WebRTC data channel closed."));
+        };
         dataChannel.onerror += error => openSource.TrySetException(new InvalidOperationException($"WebRTC data channel error: {error}"));
         dataChannel.onmessage += (_, _, data) =>
         {
+            _ = TryLogAsync($"Received {data.Length} bytes on WebRTC data channel '{dataChannel.label}'.");
             RemoteTranscriptionResultMessage? response;
             try
             {

@@ -106,9 +106,22 @@ public sealed class WebRtcSessionRegistry
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             var peerConnection = new RTCPeerConnection(CreateConfiguration(request.IceServerUrl));
+            var dataChannel = await peerConnection.createDataChannel(
+                request.ChannelLabel,
+                new RTCDataChannelInit
+                {
+                    negotiated = true,
+                    id = WebRtcProtocolConstants.DefaultChannelId
+                }).ConfigureAwait(false);
+
+            AttachDataChannel(dataChannel);
+            await TryLogAsync(
+                $"Configured negotiated WebRTC data channel '{request.ChannelLabel}' with id {WebRtcProtocolConstants.DefaultChannelId} for session {Id}.")
+                .ConfigureAwait(false);
             peerConnection.ondatachannel += AttachDataChannel;
             peerConnection.onconnectionstatechange += state =>
             {
+                _ = TryLogAsync($"WebRTC peer connection state for session {Id} changed to {state}.");
                 if (state.ToString().Equals("failed", StringComparison.OrdinalIgnoreCase) ||
                     state.ToString().Equals("closed", StringComparison.OrdinalIgnoreCase) ||
                     state.ToString().Equals("disconnected", StringComparison.OrdinalIgnoreCase))
@@ -116,6 +129,10 @@ public sealed class WebRtcSessionRegistry
                     _removeSession(Id);
                 }
             };
+            peerConnection.oniceconnectionstatechange += state =>
+                _ = TryLogAsync($"WebRTC ICE connection state for session {Id} changed to {state}.");
+            peerConnection.onicegatheringstatechange += state =>
+                _ = TryLogAsync($"WebRTC ICE gathering state for session {Id} changed to {state}.");
 
             var remoteDescriptionResult = peerConnection.setRemoteDescription(new RTCSessionDescriptionInit
             {
@@ -132,13 +149,16 @@ public sealed class WebRtcSessionRegistry
             var answer = peerConnection.createAnswer(null);
             await peerConnection.setLocalDescription(answer).ConfigureAwait(false);
             await WaitForIceGatheringCompleteAsync(peerConnection, cancellationToken).ConfigureAwait(false);
+            var localAnswer = peerConnection.localDescription;
+            var answerType = localAnswer is null ? answer.type.ToString() : localAnswer.type.ToString();
+            var answerSdp = localAnswer is null ? answer.sdp : localAnswer.sdp.ToString();
 
             _peerConnection = peerConnection;
             await TryLogAsync($"Accepted WebRTC transcription session {Id}.").ConfigureAwait(false);
 
             return new WebRtcOfferResponse(
                 Id,
-                new WebRtcSessionDescription(answer.type.ToString(), answer.sdp));
+                new WebRtcSessionDescription(answerType, answerSdp));
         }
 
         public void Dispose()
@@ -164,8 +184,19 @@ public sealed class WebRtcSessionRegistry
         private void AttachDataChannel(RTCDataChannel dataChannel)
         {
             _dataChannel = dataChannel;
-            dataChannel.onmessage += (_, _, data) => _ = HandleMessageAsync(data);
-            dataChannel.onclose += () => _removeSession(Id);
+            _ = TryLogAsync(
+                $"Attached WebRTC data channel '{dataChannel.label}' for session {Id}. ReadyState={dataChannel.readyState}; Id={dataChannel.id?.ToString() ?? "null"}.");
+            dataChannel.onopen += () => _ = TryLogAsync($"WebRTC data channel '{dataChannel.label}' opened for session {Id}.");
+            dataChannel.onmessage += (_, _, data) =>
+            {
+                _ = TryLogAsync($"Received {data.Length} bytes on WebRTC data channel '{dataChannel.label}' for session {Id}.");
+                _ = HandleMessageAsync(data);
+            };
+            dataChannel.onclose += () =>
+            {
+                _ = TryLogAsync($"WebRTC data channel '{dataChannel.label}' closed for session {Id}.");
+                _removeSession(Id);
+            };
             dataChannel.onerror += error => _ = SendFailureAsync(string.Empty, $"WebRTC data channel error: {error}");
         }
 
@@ -180,6 +211,9 @@ public sealed class WebRtcSessionRegistry
                     startMessage is not null &&
                     startMessage.IsValid)
                 {
+                    await TryLogAsync(
+                        $"Received transcription start request {startMessage.RequestId} for session {Id} ({startMessage.SourceType}, {startMessage.AudioFormat}, {startMessage.PayloadLength} bytes).")
+                        .ConfigureAwait(false);
                     await BeginRequestAsync(startMessage).ConfigureAwait(false);
                     return;
                 }
@@ -191,6 +225,7 @@ public sealed class WebRtcSessionRegistry
                     endMessage is not null &&
                     endMessage.IsValid)
                 {
+                    await TryLogAsync($"Received transcription end request {endMessage.RequestId} for session {Id}.").ConfigureAwait(false);
                     await CompleteRequestAsync(endMessage).ConfigureAwait(false);
                     return;
                 }
@@ -199,6 +234,9 @@ public sealed class WebRtcSessionRegistry
             }
             catch (Exception exception)
             {
+                await TryLogAsync(
+                    $"WebRTC session {Id} failed while handling request {CurrentRequestId}: {exception.GetType().Name}: {exception.Message}")
+                    .ConfigureAwait(false);
                 await SendFailureAsync(CurrentRequestId, exception.Message).ConfigureAwait(false);
                 ClearPendingRequest();
             }
@@ -256,6 +294,9 @@ public sealed class WebRtcSessionRegistry
             {
                 tempAudioPath = await MaterializeAudioAsync(pendingRequest.Metadata, payload).ConfigureAwait(false);
                 var modelPath = ResolveModelPath(pendingRequest.Metadata);
+                await TryLogAsync(
+                    $"Starting transcription for request {pendingRequest.Metadata.RequestId} in session {Id}. ModelPath={modelPath}; PayloadBytes={payload.LongLength}; SourceType={pendingRequest.Metadata.SourceType}; AudioFormat={pendingRequest.Metadata.AudioFormat}.")
+                    .ConfigureAwait(false);
                 var transcriptionRequest = CreateTranscriptionRequest(
                     pendingRequest.Metadata,
                     tempAudioPath,
@@ -264,6 +305,9 @@ public sealed class WebRtcSessionRegistry
                     _serverOptions,
                     _whisperOptions);
                 var result = await _transcriptionService.TranscribeAsync(transcriptionRequest).ConfigureAwait(false);
+                await TryLogAsync(
+                    $"Completed transcription for request {pendingRequest.Metadata.RequestId} in session {Id}. TextLength={result.Text.Length}; DetectedLanguage={result.DetectedLanguage ?? "unknown"}.")
+                    .ConfigureAwait(false);
                 await SendSuccessAsync(pendingRequest.Metadata.RequestId, result).ConfigureAwait(false);
             }
             finally

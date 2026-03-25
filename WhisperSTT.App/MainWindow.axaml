@@ -160,7 +160,7 @@
 
       <TabItem Header="File Transcription">
         <Grid Margin="0,16,0,0"
-              RowDefinitions="Auto,Auto,*">
+              RowDefinitions="Auto,Auto,Auto,*">
           <Border Padding="16"
                   Background="{StaticResource PanelBrush}"
                   CornerRadius="14">
@@ -182,7 +182,31 @@
             </Grid>
           </Border>
 
-          <StackPanel Grid.Row="1"
+          <Border Grid.Row="1"
+                  Margin="0,16,0,0"
+                  Padding="22"
+                  DragDrop.AllowDrop="True"
+                  Background="{StaticResource PanelBrush}"
+                  BorderBrush="{StaticResource AccentBrush}"
+                  BorderThickness="2"
+                  CornerRadius="14"
+                  DragDrop.DragOver="OnAudioFileDragOver"
+                  DragDrop.Drop="OnAudioFileDrop">
+            <StackPanel HorizontalAlignment="Center"
+                        Spacing="8">
+              <TextBlock HorizontalAlignment="Center"
+                         FontSize="18"
+                         FontWeight="SemiBold"
+                         Text="Drop Audio File Here" />
+              <TextBlock HorizontalAlignment="Center"
+                         Opacity="0.75"
+                         Text="Drag a .wav or .mp3 file into this area to load it for preview and transcription."
+                         TextAlignment="Center"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel Grid.Row="2"
                       Margin="0,16,0,16"
                       Orientation="Horizontal">
             <Button Width="90"
@@ -202,7 +226,7 @@
                        Text="{Binding FileTranscriptionElapsedText}" />
           </StackPanel>
 
-          <Border Grid.Row="2"
+          <Border Grid.Row="3"
                   Padding="16"
                   Background="{StaticResource PanelBrush}"
                   CornerRadius="14">

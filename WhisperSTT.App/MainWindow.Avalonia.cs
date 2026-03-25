@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using WhisperSTT.App.Services;
 using WhisperSTT.App.ViewModels;
 
@@ -9,6 +10,11 @@ namespace WhisperSTT.App;
 
 public partial class MainWindow : Window
 {
+    private static readonly HashSet<string> SupportedAudioExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".wav",
+        ".mp3"
+    };
     private readonly MainViewModel _viewModel;
     private IGlobalHotkeyService? _globalHotkeyService;
 
@@ -89,6 +95,27 @@ public partial class MainWindow : Window
     private void OnHotkeysChanged(object? sender, EventArgs e)
     {
         _globalHotkeyService?.ApplySettings(_viewModel.Settings.Hotkeys);
+    }
+
+    private void OnAudioFileDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = TryGetFirstSupportedAudioFilePath(e, out _)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnAudioFileDrop(object? sender, DragEventArgs e)
+    {
+        if (!TryGetFirstSupportedAudioFilePath(e, out var filePath) ||
+            string.IsNullOrWhiteSpace(filePath))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        _viewModel.SelectAudioFile(filePath);
+        e.Handled = true;
     }
 
     private void OnHotkeyTextBoxKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
@@ -203,5 +230,34 @@ public partial class MainWindow : Window
             Key.Right => "Right",
             _ => string.Empty
         };
+    }
+
+    private static bool TryGetFirstSupportedAudioFilePath(DragEventArgs e, out string? filePath)
+    {
+        filePath = null;
+        var files = e.Data.GetFiles();
+        if (files is null)
+        {
+            return false;
+        }
+
+        foreach (var file in files.OfType<IStorageFile>())
+        {
+            var localPath = file.TryGetLocalPath();
+            if (string.IsNullOrWhiteSpace(localPath))
+            {
+                continue;
+            }
+
+            if (!SupportedAudioExtensions.Contains(Path.GetExtension(localPath)))
+            {
+                continue;
+            }
+
+            filePath = localPath;
+            return true;
+        }
+
+        return false;
     }
 }

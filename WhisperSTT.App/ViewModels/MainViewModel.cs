@@ -605,9 +605,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        SelectedFilePath = filePath;
-        TryLoadPreview(filePath);
-        RaiseCommandStates();
+        SelectAudioFile(filePath);
     }
 
     private async Task BrowseModelFileAsync()
@@ -749,6 +747,38 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             RaiseCommandStates();
             return false;
         }
+    }
+
+    public bool SelectAudioFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            LastError = "No audio file was provided.";
+            return false;
+        }
+
+        if (!File.Exists(filePath))
+        {
+            LastError = $"Audio file not found: {filePath}";
+            return false;
+        }
+
+        var extension = Path.GetExtension(filePath);
+        if (!string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(extension, ".mp3", StringComparison.OrdinalIgnoreCase))
+        {
+            LastError = "Only .wav and .mp3 files are supported for file transcription.";
+            return false;
+        }
+
+        SelectedFilePath = filePath;
+        if (TryLoadPreview(filePath))
+        {
+            LastError = $"Audio file selected: {filePath}";
+        }
+
+        RaiseCommandStates();
+        return true;
     }
 
     private void InitializePreviewState()

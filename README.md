@@ -21,6 +21,7 @@ Implemented:
 - Model preset selection
 - Model download button for preset Whisper models
 - File transcription page for `*.wav` and `*.mp3`
+- Drag-and-drop zone for loading local audio files
 - Audio preview controls: `Play`, `Pause`, `Stop`
 - Manual `Copy` button for the latest transcript
 - Dynamic tray/taskbar status icons: green `Idle`, red `Recording`, blue `Transcribing`
@@ -210,7 +211,7 @@ Microphone dictation flow:
 
 File transcription flow:
 
-1. Select a local `*.wav` or `*.mp3` file.
+1. Select a local `*.wav` or `*.mp3` file, or drag it into the drop zone.
 2. Optionally preview the audio.
 3. Start transcription from the `File Transcription` page.
 4. The transcript is shown in the UI and optionally written to history.

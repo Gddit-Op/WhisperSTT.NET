@@ -80,7 +80,7 @@
                       VerticalScrollBarVisibility="Auto">
           <Grid Width="{Binding #DashboardScrollViewer.Bounds.Width}"
                 RowDefinitions="Auto,Auto,Auto"
-                RowSpacing="18">
+                RowSpacing="10">
             <Grid ColumnDefinitions="1.15*,0.85*"
                   ColumnSpacing="18">
               <Border Classes="card">
@@ -176,9 +176,35 @@
                           Classes="toolbar-pill"
                           VerticalAlignment="Top">
                     <Button Classes="secondary"
-                            MinWidth="96"
-                            Command="{Binding CopyLatestTranscriptCommand}"
-                            Content="Copy" />
+                            MinWidth="82"
+                            Padding="10,8"
+                            Command="{Binding CopyLatestTranscriptCommand}">
+                      <StackPanel Orientation="Horizontal"
+                                  Spacing="3">
+                        <Canvas Width="16"
+                                Height="16">
+                          <Border Width="9"
+                                  Height="9"
+                                  Canvas.Left="1"
+                                  Canvas.Top="4"
+                                  Background="Transparent"
+                                  BorderBrush="{StaticResource TextSecondaryBrush}"
+                                  BorderThickness="1.5"
+                                  CornerRadius="2" />
+                          <Border Width="9"
+                                  Height="9"
+                                  Canvas.Left="5"
+                                  Canvas.Top="1"
+                                  Background="Transparent"
+                                  BorderBrush="{StaticResource TextBrush}"
+                                  BorderThickness="1.5"
+                                  CornerRadius="2" />
+                        </Canvas>
+                        <TextBlock VerticalAlignment="Center"
+                                   FontWeight="SemiBold"
+                                   Text="Copy" />
+                      </StackPanel>
+                    </Button>
                   </Border>
                 </Grid>
                 <TextBox Grid.Row="1"

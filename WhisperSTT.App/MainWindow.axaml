@@ -74,10 +74,12 @@
     <TabControl Grid.Row="1"
                 Classes="main-tabs">
       <TabItem Header="Dashboard">
-        <ScrollViewer Margin="0,18,0,0"
+        <ScrollViewer x:Name="DashboardScrollViewer"
+                      Margin="0,18,0,0"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
-          <Grid RowDefinitions="Auto,Auto,Auto"
+          <Grid Width="{Binding #DashboardScrollViewer.Bounds.Width}"
+                RowDefinitions="Auto,Auto,Auto"
                 RowSpacing="18">
             <Grid ColumnDefinitions="1.15*,0.85*"
                   ColumnSpacing="18">
@@ -193,6 +195,7 @@
             <Border Grid.Row="2"
                     Classes="card">
               <Expander Classes="diagnostic-expander"
+                        HorizontalAlignment="Stretch"
                         IsExpanded="False">
                 <Expander.Header>
                   <Grid ColumnDefinitions="*,Auto"
@@ -206,11 +209,13 @@
                   </Grid>
                 </Expander.Header>
 
-                <ScrollViewer Margin="0,14,0,0"
+                <ScrollViewer x:Name="DiagnosticsScrollViewer"
+                              Margin="0,14,0,0"
                               MaxHeight="190"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
-                  <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                  <Grid Width="{Binding #DiagnosticsScrollViewer.Bounds.Width}"
+                        RowDefinitions="Auto,Auto,Auto,Auto"
                         ColumnDefinitions="Auto,*"
                         ColumnSpacing="16"
                         RowSpacing="8">

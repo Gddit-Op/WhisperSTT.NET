@@ -204,7 +204,7 @@ Microphone dictation flow:
 4. If `Language Mode` is `auto`, Whisper language detection is enabled explicitly.
 5. The configured runtime preference is applied before Whisper is created.
 6. The recognized text is copied to the clipboard.
-7. `Ctrl+V` is sent to the focused application.
+7. `Ctrl+V` is sent to the focused application, or `Shift+Insert` for terminal-style windows.
 8. The previous clipboard content is restored if that option is enabled.
 9. The detected language is shown in the UI and written to `app.log`.
 

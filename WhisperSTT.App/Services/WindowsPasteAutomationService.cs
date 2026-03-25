@@ -10,6 +10,21 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
 {
     private const int PasteRetryCount = 3;
     private static readonly TimeSpan PasteRetryDelay = TimeSpan.FromMilliseconds(50);
+    private static readonly string[] ShiftInsertWindowClasses =
+    {
+        "CASCADIA_HOSTING_WINDOW_CLASS",
+        "ConsoleWindowClass",
+        "VirtualConsoleClass",
+        "mintty",
+        "org.wezfurlong.wezterm"
+    };
+    private static readonly string[] BrowserWindowClasses =
+    {
+        "Chrome_WidgetWin_1",
+        "Chrome_WidgetWin_0",
+        "MozillaWindowClass",
+        "ApplicationFrameWindow"
+    };
     private readonly IActivityLogService? _activityLogService;
 
     public WindowsPasteAutomationService(IActivityLogService? activityLogService = null)
@@ -17,63 +32,97 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
         _activityLogService = activityLogService;
     }
 
-    public void PasteFromClipboard()
+    public PasteAutomationTarget CaptureTarget()
     {
-        var targetDiagnostics = CapturePasteTargetDiagnostics();
-        TryWriteDiagnosticLine($"Paste diagnostics: target={targetDiagnostics}.");
+        return new PasteAutomationTarget(NativeMethods.GetForegroundWindow());
+    }
 
-        string? lastSendInputDetail = null;
+    public void PasteFromClipboard(PasteAutomationTarget target)
+    {
+        var targetDiagnostics = CapturePasteTargetDiagnostics(target);
+        TryWriteDiagnosticLine($"Paste diagnostics: target={targetDiagnostics}.");
+        var preferredShortcut = SelectPreferredShortcut(targetDiagnostics);
+
+        string? lastShortcutDetail = null;
         string? lastPasteMessageDetail = null;
         for (var attempt = 1; attempt <= PasteRetryCount; attempt++)
         {
-            if (TrySendPasteShortcut(out var sendInputDetail))
+            RestoreForegroundWindow(targetDiagnostics.ForegroundWindow);
+
+            if (TrySendPasteShortcut(preferredShortcut, out var shortcutDetail))
             {
-                TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: SendInput succeeded.");
+                TryWriteDiagnosticLine(
+                    $"Paste diagnostics: attempt {attempt}: {GetShortcutName(preferredShortcut)} SendInput dispatched.");
                 return;
             }
 
-            lastSendInputDetail = sendInputDetail;
-            TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: SendInput failed: {sendInputDetail}.");
+            lastShortcutDetail = shortcutDetail;
+            TryWriteDiagnosticLine(
+                $"Paste diagnostics: attempt {attempt}: {GetShortcutName(preferredShortcut)} SendInput failed: {shortcutDetail}.");
 
-            if (TrySendPasteMessage(targetDiagnostics.ForegroundWindow, out var pasteMessageDetail))
+            var supportsPasteMessage = SupportsPasteMessage(targetDiagnostics);
+            string? currentPasteMessageDetail = null;
+            if (supportsPasteMessage &&
+                TrySendPasteMessage(targetDiagnostics.ForegroundWindow, out currentPasteMessageDetail))
             {
                 TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: WM_PASTE fallback succeeded.");
                 return;
             }
 
-            lastPasteMessageDetail = pasteMessageDetail;
-            TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: WM_PASTE fallback failed: {pasteMessageDetail}.");
+            lastPasteMessageDetail = supportsPasteMessage
+                ? currentPasteMessageDetail
+                : $"WM_PASTE skipped for browser-style window class '{targetDiagnostics.ForegroundClassName}'";
+            TryWriteDiagnosticLine($"Paste diagnostics: attempt {attempt}: WM_PASTE fallback failed: {lastPasteMessageDetail}.");
             Thread.Sleep(PasteRetryDelay);
         }
 
-        throw new InvalidOperationException(CreatePasteFailureMessage(targetDiagnostics, lastSendInputDetail, lastPasteMessageDetail));
+        throw new InvalidOperationException(CreatePasteFailureMessage(targetDiagnostics, preferredShortcut, lastShortcutDetail, lastPasteMessageDetail));
     }
 
-    private static bool TrySendPasteShortcut(out string detail)
+    private static bool TrySendPasteShortcut(PasteShortcut shortcut, out string detail)
     {
-        var inputs = new[]
+        NativeMethods.INPUT[] inputs = shortcut switch
         {
-            CreateKeyInput(NativeMethods.VkControl, keyUp: false),
-            CreateKeyInput(NativeMethods.VkV, keyUp: false),
-            CreateKeyInput(NativeMethods.VkV, keyUp: true),
-            CreateKeyInput(NativeMethods.VkControl, keyUp: true)
+            PasteShortcut.CtrlV =>
+            new[]
+            {
+                CreateKeyInput(NativeMethods.VkControl, keyUp: true),
+                CreateKeyInput(NativeMethods.VkMenu, keyUp: true),
+                CreateKeyInput(NativeMethods.VkShift, keyUp: true),
+                CreateKeyInput(NativeMethods.VkControl, keyUp: false),
+                CreateKeyInput(NativeMethods.VkV, keyUp: false),
+                CreateKeyInput(NativeMethods.VkV, keyUp: true),
+                CreateKeyInput(NativeMethods.VkControl, keyUp: true)
+            },
+            PasteShortcut.ShiftInsert =>
+            new[]
+            {
+                CreateKeyInput(NativeMethods.VkControl, keyUp: true),
+                CreateKeyInput(NativeMethods.VkMenu, keyUp: true),
+                CreateKeyInput(NativeMethods.VkShift, keyUp: true),
+                CreateKeyInput(NativeMethods.VkShift, keyUp: false),
+                CreateKeyInput(NativeMethods.VkInsert, keyUp: false, extendedKey: true),
+                CreateKeyInput(NativeMethods.VkInsert, keyUp: true, extendedKey: true),
+                CreateKeyInput(NativeMethods.VkShift, keyUp: true)
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(shortcut), shortcut, null)
         };
 
         var sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
         if (sent == inputs.Length)
         {
-            detail = $"sent {sent}/{inputs.Length} inputs";
+            detail = $"{GetShortcutName(shortcut)} sent {sent}/{inputs.Length} inputs";
             return true;
         }
 
         var errorCode = Marshal.GetLastWin32Error();
         if (errorCode == 0)
         {
-            detail = $"SendInput returned {sent}/{inputs.Length} without a Win32 error";
+            detail = $"{GetShortcutName(shortcut)} SendInput returned {sent}/{inputs.Length} without a Win32 error";
             return false;
         }
 
-        detail = $"Win32 {errorCode}: {new Win32Exception(errorCode).Message}";
+        detail = $"{GetShortcutName(shortcut)} Win32 {errorCode}: {new Win32Exception(errorCode).Message}";
         return false;
     }
 
@@ -117,7 +166,8 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
 
     private static string CreatePasteFailureMessage(
         PasteTargetDiagnostics diagnostics,
-        string? sendInputDetail,
+        PasteShortcut shortcut,
+        string? shortcutDetail,
         string? pasteMessageDetail)
     {
         if (diagnostics.ForegroundWindow == IntPtr.Zero)
@@ -130,12 +180,59 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
             return "Automatic paste failed. The transcript remains on the clipboard because the focused target window is running as administrator. Start WhisperSTT as administrator to paste there automatically, or paste manually.";
         }
 
-        if (!string.IsNullOrWhiteSpace(sendInputDetail) || !string.IsNullOrWhiteSpace(pasteMessageDetail))
+        if (!string.IsNullOrWhiteSpace(shortcutDetail) || !string.IsNullOrWhiteSpace(pasteMessageDetail))
         {
-            return "Automatic paste failed. The transcript remains on the clipboard because the target application rejected both simulated Ctrl+V input and WM_PASTE. Use the Copy button or paste manually.";
+            return $"Automatic paste failed. The transcript remains on the clipboard because the target application rejected both simulated {GetShortcutName(shortcut)} input and WM_PASTE. Use the Copy button or paste manually.";
         }
 
         return "Automatic paste failed. The transcript remains on the clipboard. Use the Copy button or paste manually.";
+    }
+
+    private static PasteShortcut SelectPreferredShortcut(PasteTargetDiagnostics diagnostics)
+    {
+        if (UsesShiftInsertPaste(diagnostics.FocusedClassName) ||
+            UsesShiftInsertPaste(diagnostics.ForegroundClassName))
+        {
+            return PasteShortcut.ShiftInsert;
+        }
+
+        return PasteShortcut.CtrlV;
+    }
+
+    private static bool UsesShiftInsertPaste(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+        {
+            return false;
+        }
+
+        return ShiftInsertWindowClasses.Any(candidate => string.Equals(candidate, className, StringComparison.Ordinal));
+    }
+
+    private static string GetShortcutName(PasteShortcut shortcut)
+    {
+        return shortcut switch
+        {
+            PasteShortcut.CtrlV => "Ctrl+V",
+            PasteShortcut.ShiftInsert => "Shift+Insert",
+            _ => throw new ArgumentOutOfRangeException(nameof(shortcut), shortcut, null)
+        };
+    }
+
+    private static bool SupportsPasteMessage(PasteTargetDiagnostics diagnostics)
+    {
+        return !IsBrowserStyleWindow(diagnostics.ForegroundClassName) &&
+               !IsBrowserStyleWindow(diagnostics.FocusedClassName);
+    }
+
+    private static bool IsBrowserStyleWindow(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+        {
+            return false;
+        }
+
+        return BrowserWindowClasses.Any(candidate => string.Equals(candidate, className, StringComparison.Ordinal));
     }
 
     private static bool TryIsWindowElevated(IntPtr windowHandle, out bool isElevated)
@@ -216,20 +313,48 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
         }
     }
 
-    private static PasteTargetDiagnostics CapturePasteTargetDiagnostics()
+    private static PasteTargetDiagnostics CapturePasteTargetDiagnostics(PasteAutomationTarget target)
     {
-        var foregroundWindow = NativeMethods.GetForegroundWindow();
+        var currentForegroundWindow = NativeMethods.GetForegroundWindow();
+        var foregroundWindow = target.ForegroundWindow != IntPtr.Zero
+            ? target.ForegroundWindow
+            : currentForegroundWindow;
         var focusedWindow = IntPtr.Zero;
         _ = TryGetFocusedWindow(foregroundWindow, out focusedWindow);
         var couldDetermineElevation = TryIsWindowElevated(foregroundWindow, out var isElevated);
 
         return new PasteTargetDiagnostics(
             foregroundWindow,
+            currentForegroundWindow,
             focusedWindow,
+            GetWindowClassName(foregroundWindow),
+            GetWindowClassName(focusedWindow),
             DescribeWindow(foregroundWindow),
+            DescribeWindow(currentForegroundWindow),
             DescribeWindow(focusedWindow),
             couldDetermineElevation,
             isElevated);
+    }
+
+    private static void RestoreForegroundWindow(IntPtr targetWindow)
+    {
+        if (targetWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var currentForegroundWindow = NativeMethods.GetForegroundWindow();
+        if (currentForegroundWindow == targetWindow)
+        {
+            return;
+        }
+
+        if (!NativeMethods.SetForegroundWindow(targetWindow))
+        {
+            return;
+        }
+
+        Thread.Sleep(25);
     }
 
     private static bool TryGetFocusedWindow(IntPtr foregroundWindow, out IntPtr focusedWindow)
@@ -255,7 +380,7 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
         return focusedWindow != IntPtr.Zero;
     }
 
-    private static NativeMethods.INPUT CreateKeyInput(ushort virtualKey, bool keyUp)
+    private static NativeMethods.INPUT CreateKeyInput(ushort virtualKey, bool keyUp, bool extendedKey = false)
     {
         return new NativeMethods.INPUT
         {
@@ -265,7 +390,8 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
                 ki = new NativeMethods.KEYBDINPUT
                 {
                     wVk = virtualKey,
-                    dwFlags = keyUp ? NativeMethods.KeyEventFKeyUp : 0
+                    dwFlags = (keyUp ? NativeMethods.KeyEventFKeyUp : 0) |
+                              (extendedKey ? NativeMethods.KeyEventFExtendedKey : 0)
                 }
             }
         };
@@ -328,8 +454,12 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
 
     private readonly record struct PasteTargetDiagnostics(
         IntPtr ForegroundWindow,
+        IntPtr CurrentForegroundWindow,
         IntPtr FocusedWindow,
+        string ForegroundClassName,
+        string FocusedClassName,
         string ForegroundDescription,
+        string CurrentForegroundDescription,
         string FocusedDescription,
         bool CouldDetermineElevation,
         bool IsElevated)
@@ -339,7 +469,13 @@ internal sealed class WindowsPasteAutomationService : IPasteAutomationService
             var elevationText = CouldDetermineElevation
                 ? (IsElevated ? "elevated" : "not elevated")
                 : "elevation unknown";
-            return $"foreground={ForegroundDescription}; focus={FocusedDescription}; {elevationText}";
+            return $"foreground={ForegroundDescription}; currentForeground={CurrentForegroundDescription}; focus={FocusedDescription}; {elevationText}";
         }
+    }
+
+    private enum PasteShortcut
+    {
+        CtrlV,
+        ShiftInsert
     }
 }

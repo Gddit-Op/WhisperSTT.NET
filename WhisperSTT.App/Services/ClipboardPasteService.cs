@@ -11,6 +11,8 @@ internal sealed class ClipboardPasteService : IPasteService
 {
     private const int ClipboardRetryCount = 8;
     private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(75);
+    private static readonly TimeSpan ClipboardSettleDelay = TimeSpan.FromMilliseconds(75);
+    private static readonly TimeSpan PasteCompletionDelay = TimeSpan.FromMilliseconds(300);
     private readonly IPasteAutomationService _pasteAutomationService;
 
     public ClipboardPasteService(IPasteAutomationService pasteAutomationService)
@@ -38,6 +40,7 @@ internal sealed class ClipboardPasteService : IPasteService
             return;
         }
 
+        var pasteTarget = _pasteAutomationService.CaptureTarget();
         IAsyncDataTransfer? snapshot = null;
         if (restoreClipboard)
         {
@@ -51,8 +54,9 @@ internal sealed class ClipboardPasteService : IPasteService
                 cancellationToken,
                 throwOnFailure: true).ConfigureAwait(true);
 
-            _pasteAutomationService.PasteFromClipboard();
-            await Task.Delay(100, cancellationToken).ConfigureAwait(true);
+            await Task.Delay(ClipboardSettleDelay, cancellationToken).ConfigureAwait(true);
+            _pasteAutomationService.PasteFromClipboard(pasteTarget);
+            await Task.Delay(PasteCompletionDelay, cancellationToken).ConfigureAwait(true);
 
             if (!restoreClipboard)
             {

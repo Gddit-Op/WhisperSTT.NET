@@ -76,14 +76,26 @@ internal sealed class NoOpGlobalHotkeyService : IGlobalHotkeyService
 
 internal interface IPasteAutomationService
 {
-    void PasteFromClipboard();
+    PasteAutomationTarget CaptureTarget();
+
+    void PasteFromClipboard(PasteAutomationTarget target);
 }
 
 internal sealed class NoOpPasteAutomationService : IPasteAutomationService
 {
-    public void PasteFromClipboard()
+    public PasteAutomationTarget CaptureTarget()
+    {
+        return PasteAutomationTarget.Empty;
+    }
+
+    public void PasteFromClipboard(PasteAutomationTarget target)
     {
         throw new InvalidOperationException(
             "Automatic paste is not available on this platform. The transcript was copied to the clipboard.");
     }
+}
+
+internal readonly record struct PasteAutomationTarget(IntPtr ForegroundWindow)
+{
+    public static PasteAutomationTarget Empty { get; } = new(IntPtr.Zero);
 }

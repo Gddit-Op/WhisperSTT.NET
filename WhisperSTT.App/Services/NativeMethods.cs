@@ -11,6 +11,7 @@ internal static class NativeMethods
     public const int WmHotKey = 0x0312;
     public const uint WmPaste = 0x0302;
     public const uint InputKeyboard = 1;
+    public const uint KeyEventFExtendedKey = 0x0001;
     public const uint KeyEventFKeyUp = 0x0002;
     public const uint MbIconInformation = 0x00000040;
     public const uint MbOk = 0x00000000;
@@ -22,7 +23,10 @@ internal static class NativeMethods
     public const uint SmtoAbortIfHung = 0x0002;
     public const uint TokenQuery = 0x0008;
     public const ushort VkControl = 0x11;
+    public const ushort VkMenu = 0x12;
+    public const ushort VkShift = 0x10;
     public const ushort VkV = 0x56;
+    public const ushort VkInsert = 0x2D;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -46,6 +50,10 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetWindowText(IntPtr hWnd, char[] lpString, int nMaxCount);
@@ -104,7 +112,24 @@ internal static class NativeMethods
     public struct InputUnion
     {
         [FieldOffset(0)]
+        public MOUSEINPUT mi;
+
+        [FieldOffset(0)]
         public KEYBDINPUT ki;
+
+        [FieldOffset(0)]
+        public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -115,6 +140,14 @@ internal static class NativeMethods
         public uint dwFlags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     [StructLayout(LayoutKind.Sequential)]

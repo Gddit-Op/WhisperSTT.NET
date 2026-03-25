@@ -1,0 +1,48 @@
+
+
+
+• Ja. Das aktuelle UI ist funktional, aber es wirkt noch stark wie ein internes Tool. Der größte Hebel ist weniger “mehr
+  Styling”, sondern klarere Hierarchie, weniger Dichte und ein eindeutigerer Fokus pro Bereich.
+
+  Wichtigste Hebel
+
+  - Die Startansicht sollte eine klare Primäraktion haben. Oben ist das schon fast da, aber Start Recording, Status,
+    Hotkeys und Model Status konkurrieren noch. Ich würde den Header stärker als “Capture Console” gestalten und die
+    sekundären Infos kleiner machen.
+  - Dashboard, File Transcription und Settings fühlen sich noch wie gleichwertige Formulare an. Besser wäre: Dashboard
+    als operative Startseite, File Transcription als eigener Workflow mit großem Drop-Ziel, Settings deutlich ruhiger
+    und stärker gruppiert.
+  - Die Informationsdichte ist zu gleichmäßig. Fast alle Panels haben dieselbe visuelle Lautstärke. Das nimmt
+    Orientierung. Ein bis zwei dominante Panels reichen, der Rest sollte zurücktreten.
+
+  Konkrete Design-Verbesserungen
+
+  - Größere visuelle Trennung zwischen “Live Dictation” und “File Transcription”.
+  - Den Latest Transcript-Block deutlich größer und hochwertiger machen, eher wie ein Arbeitsbereich statt wie ein
+    großes Textfeld.
+  - Diagnostics nicht dauerhaft so prominent zeigen. Eher als kompakter Status-Block mit “mehr anzeigen”.
+  - Im File-Tab die Drop-Zone zum visuellen Zentrum machen, mit stärkerem Kontrast, größerem Innenabstand und Icon.
+  - Die Settings in klarere Sektionen mit Untertiteln und kurzen Hilfetexten aufteilen. Aktuell ist es viel
+    Formularfläche am Stück.
+  - Buttons stärker priorisieren: nur eine Akzentfarbe für die wichtigste Aktion, sekundäre Buttons neutral.
+  - Die Statusfarben etwas kontrollierter einsetzen. Im Moment ist viel Farbe funktional, aber nicht systematisch.
+
+  Stilrichtung, die gut passen würde
+
+  - Warmes Desktop-Tool statt Standard-Fluent-Formular.
+  - Mehr Kartencharakter, größere Radien, etwas mehr Luft zwischen Sektionen.
+  - Typografisch stärkerer Kontrast: große, präzise Überschriften, ruhigere Labels.
+  - Leichte visuelle Textur oder Verlauf im Hintergrund statt komplett flacher Fläche.
+  - Für den Recording-Status gern etwas markanter, z. B. ein leuchtender Aufnahmeindikator statt nur Badge-Farbe.
+
+  Wenn ich es direkt umbauen würde
+
+  - /C:/Github/STT/Whisper.NET/WhisperSTT.App/MainWindow.axaml in 3 Bereiche neu ordnen:
+      1. Oben eine starke Aufnahme-Leiste
+      2. Mitte ein großer Transcript-/Drop-Workspace
+      3. Unten oder rechts eine kompakte Utility-Zone für Status, Preview, Diagnostics
+  - Die Farbvariablen in /C:/Github/STT/Whisper.NET/WhisperSTT.App/App.axaml auf ein konsistenteres System ausbauen:
+    Hintergrund, Surface, Accent, AccentMuted, Border, Success, Warning, Danger.
+  - Den File-Tab visuell von einer Formularzeile zu einem echten Upload-/Arbeitsbereich umbauen.
+
+  Wenn du willst, kann ich dir als Nächstes direkt ein konkretes Redesign in MainWindow.axaml und App.axaml umsetzen.

@@ -4,424 +4,630 @@
         x:Class="WhisperSTT.App.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="WhisperSTT"
-        Width="1100"
-        Height="760"
-        MinWidth="900"
-        MinHeight="620"
-        Background="{StaticResource SurfaceBrush}"
-        FontFamily="Bahnschrift"
+        Width="1140"
+        Height="780"
+        MinWidth="920"
+        MinHeight="660"
+        Background="{StaticResource WindowBackgroundBrush}"
         WindowStartupLocation="CenterScreen">
-  <Grid Margin="18" RowDefinitions="Auto,*">
-    <Border Padding="18"
-            CornerRadius="18"
-            Background="{StaticResource PanelBrush}">
-      <Grid ColumnDefinitions="*,Auto">
-        <StackPanel>
-          <StackPanel Orientation="Horizontal"
-                      Spacing="12">
-            <TextBlock FontSize="28"
+  <Grid Margin="20"
+        RowDefinitions="Auto,*"
+        RowSpacing="18">
+    <Border Classes="header-shell">
+      <Grid ColumnDefinitions="*,Auto"
+            ColumnSpacing="20">
+        <Grid ColumnDefinitions="Auto,*"
+              ColumnSpacing="18">
+          <Border Width="58"
+                  Height="58"
+                  Background="{StaticResource AccentSoftBrush}"
+                  BorderBrush="{StaticResource BorderBrush}"
+                  BorderThickness="1"
+                  CornerRadius="18">
+            <TextBlock HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       FontSize="24"
                        FontWeight="SemiBold"
-                       Foreground="{StaticResource TextBrush}"
-                       Text="WhisperSTT" />
-            <Border Padding="10,6"
-                    VerticalAlignment="Center"
-                    Background="{Binding StatusBrush}"
-                    CornerRadius="999">
-              <TextBlock Foreground="White"
-                         FontWeight="SemiBold"
-                         Text="{Binding StatusText}" />
-            </Border>
+                       Foreground="{StaticResource AccentBrush}"
+                       Text="W" />
+          </Border>
+
+          <StackPanel Grid.Column="1"
+                      VerticalAlignment="Center"
+                      Spacing="8">
+            <StackPanel Orientation="Horizontal"
+                        Spacing="12">
+              <TextBlock Classes="page-title"
+                         VerticalAlignment="Center"
+                         Text="WhisperSTT" />
+              <Border Classes="status-badge"
+                      VerticalAlignment="Center"
+                      Background="{Binding StatusBrush}">
+                <TextBlock FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="White"
+                           Text="{Binding StatusText}" />
+              </Border>
+            </StackPanel>
+            <TextBlock Classes="page-subtitle"
+                       Text="Desktop capture with server-side Whisper transcription over HTTP."
+                       TextWrapping="Wrap" />
           </StackPanel>
-          <TextBlock Margin="0,8,0,0"
-                     FontSize="14"
-                     Foreground="{StaticResource TextBrush}"
-                     Opacity="0.75"
-                     Text="Desktop capture with server-side Whisper transcription over HTTP." />
-        </StackPanel>
+        </Grid>
 
         <StackPanel Grid.Column="1"
                     Orientation="Horizontal"
-                    VerticalAlignment="Top">
-          <Button Width="150"
-                  Margin="0,0,10,0"
-                  Padding="14,10"
-                  Background="{StaticResource AccentBrush}"
-                  Command="{Binding ToggleRecordingCommand}"
-                  Content="{Binding RecordingButtonText}"
-                  Foreground="White" />
-          <Button Width="130"
-                  Padding="14,10"
+                    Spacing="10"
+                    VerticalAlignment="Center">
+          <Button Classes="secondary"
+                  Width="132"
                   Command="{Binding CancelRecordingCommand}"
-                  Content="Cancel"
-                  Foreground="{StaticResource TextBrush}" />
+                  Content="Cancel" />
+          <Button Classes="primary"
+                  Width="172"
+                  Command="{Binding ToggleRecordingCommand}"
+                  Content="{Binding RecordingButtonText}" />
         </StackPanel>
       </Grid>
     </Border>
 
     <TabControl Grid.Row="1"
-                Margin="0,16,0,0">
+                Classes="main-tabs">
       <TabItem Header="Dashboard">
-        <Grid Margin="0,16,0,0"
-              RowDefinitions="Auto,*,Auto">
-          <Grid ColumnDefinitions="190,190,*"
-                Margin="0,0,0,16">
-            <Border Grid.Column="0"
-                    Margin="0,0,12,0"
-                    Padding="12,10"
-                    Background="{StaticResource PanelBrush}"
-                    CornerRadius="14">
-              <StackPanel Spacing="4">
-                <TextBlock FontWeight="SemiBold" Text="Toggle Hotkey" />
-                <TextBlock FontSize="18"
-                           Foreground="{StaticResource AccentBrush}"
-                           Text="{Binding Settings.Hotkeys.ToggleRecordingGesture}" />
-              </StackPanel>
+        <ScrollViewer Margin="0,18,0,0"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+          <Grid RowDefinitions="Auto,Auto,Auto"
+                RowSpacing="18">
+            <Grid ColumnDefinitions="1.15*,0.85*"
+                  ColumnSpacing="18">
+              <Border Classes="card">
+                <Grid RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="14">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Capture Overview" />
+                    <TextBlock Classes="section-caption"
+                               Text="Current transcription target, runtime mode and model availability." />
+                  </StackPanel>
+                  <TextBlock Grid.Row="1"
+                             Classes="kv-value"
+                             Text="{Binding TranscriptionModeSummary}"
+                             TextWrapping="Wrap" />
+                  <Border Grid.Row="2"
+                          Classes="card-muted">
+                    <Grid ColumnDefinitions="150,*"
+                          ColumnSpacing="14">
+                      <TextBlock Classes="kv-label"
+                                 Text="Model Status" />
+                      <TextBlock Grid.Column="1"
+                                 Classes="kv-value"
+                                 Text="{Binding ActiveModelSummary}"
+                                 TextWrapping="Wrap" />
+                    </Grid>
+                  </Border>
+                </Grid>
+              </Border>
+
+              <Border Grid.Column="1"
+                      Classes="card">
+                <Grid RowDefinitions="Auto,Auto"
+                      RowSpacing="14">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Quick Reference" />
+                    <TextBlock Classes="section-caption"
+                               Text="Hotkeys and current capture context at a glance." />
+                  </StackPanel>
+                  <Grid Grid.Row="1"
+                        ColumnDefinitions="*,*"
+                        RowDefinitions="Auto,Auto"
+                        ColumnSpacing="14"
+                        RowSpacing="14">
+                    <Border Classes="card-muted">
+                      <StackPanel Spacing="4">
+                        <TextBlock Classes="metric-label"
+                                   Text="Toggle Hotkey" />
+                        <TextBlock Classes="metric-value"
+                                   Text="{Binding Settings.Hotkeys.ToggleRecordingGesture}" />
+                      </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1"
+                            Classes="card-muted">
+                      <StackPanel Spacing="4">
+                        <TextBlock Classes="metric-label"
+                                   Text="Cancel Hotkey" />
+                        <TextBlock Classes="metric-value"
+                                   Text="{Binding Settings.Hotkeys.CancelRecordingGesture}" />
+                      </StackPanel>
+                    </Border>
+                    <Border Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            Classes="card-muted">
+                      <Grid ColumnDefinitions="110,*"
+                            ColumnSpacing="14">
+                        <TextBlock Classes="kv-label"
+                                   Text="Detected Language" />
+                        <TextBlock Grid.Column="1"
+                                   Classes="kv-value"
+                                   Text="{Binding LastDetectedLanguage}" />
+                      </Grid>
+                    </Border>
+                  </Grid>
+                </Grid>
+              </Border>
+            </Grid>
+
+            <Border Grid.Row="1"
+                    Classes="card">
+              <Grid RowDefinitions="Auto,*"
+                    RowSpacing="14">
+                <Grid ColumnDefinitions="*,Auto"
+                      ColumnSpacing="14">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Latest Transcript" />
+                    <TextBlock Classes="section-caption"
+                               Text="The most recent microphone transcription, ready to copy or paste." />
+                  </StackPanel>
+                  <Border Grid.Column="1"
+                          Classes="toolbar-pill"
+                          VerticalAlignment="Top">
+                    <Button Classes="secondary"
+                            MinWidth="96"
+                            Command="{Binding CopyLatestTranscriptCommand}"
+                            Content="Copy" />
+                  </Border>
+                </Grid>
+                <TextBox Grid.Row="1"
+                         Classes="transcript-box"
+                         Height="220"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Text="{Binding CurrentTranscript, Mode=OneWay}"
+                         TextWrapping="Wrap" />
+              </Grid>
             </Border>
 
-            <Border Grid.Column="1"
-                    Margin="0,0,12,0"
-                    Padding="12,10"
-                    Background="{StaticResource PanelBrush}"
-                    CornerRadius="14">
-              <StackPanel Spacing="4">
-                <TextBlock FontWeight="SemiBold" Text="Cancel Hotkey" />
-                <TextBlock FontSize="18"
-                           Foreground="{StaticResource AccentBrush}"
-                           Text="{Binding Settings.Hotkeys.CancelRecordingGesture}" />
-              </StackPanel>
-            </Border>
+            <Border Grid.Row="2"
+                    Classes="card">
+              <Expander Classes="diagnostic-expander"
+                        IsExpanded="False">
+                <Expander.Header>
+                  <Grid ColumnDefinitions="*,Auto"
+                        ColumnSpacing="12">
+                    <TextBlock Classes="section-title"
+                               Text="Diagnostics" />
+                    <TextBlock Grid.Column="1"
+                               Classes="section-caption"
+                               VerticalAlignment="Center"
+                               Text="Show details" />
+                  </Grid>
+                </Expander.Header>
 
-            <Border Grid.Column="2"
-                    Padding="12,10"
-                    Background="{StaticResource PanelBrush}"
-                    CornerRadius="14">
-              <StackPanel Spacing="6">
-                <TextBlock FontWeight="SemiBold" Text="Model Status" />
-                <TextBlock FontSize="13"
-                           Text="{Binding ActiveModelSummary}"
-                           TextWrapping="Wrap" />
-                <TextBlock FontSize="13"
-                           Opacity="0.75"
-                           Text="{Binding TranscriptionModeSummary}"
-                           TextWrapping="Wrap" />
-              </StackPanel>
+                <ScrollViewer Margin="0,14,0,0"
+                              MaxHeight="190"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                  <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                        ColumnDefinitions="Auto,*"
+                        ColumnSpacing="16"
+                        RowSpacing="8">
+                    <TextBlock Classes="kv-label"
+                               MinWidth="124"
+                               Text="Current Status" />
+                    <TextBlock Grid.Column="1"
+                               Classes="kv-value"
+                               Text="{Binding StatusText}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="1"
+                               Classes="kv-label"
+                               Text="Detected Language" />
+                    <TextBlock Grid.Row="1"
+                               Grid.Column="1"
+                               Classes="kv-value"
+                               Text="{Binding DetectedLanguageText}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="2"
+                               Classes="kv-label"
+                               Text="Last Message" />
+                    <Border Grid.Row="2"
+                            Grid.Column="1"
+                            Classes="card-muted"
+                            Padding="12">
+                      <TextBlock Classes="kv-value"
+                                 Text="{Binding LastError}"
+                                 TextWrapping="Wrap" />
+                    </Border>
+                    <TextBlock Grid.Row="3"
+                               Classes="kv-label"
+                               Text="Storage Paths" />
+                    <TextBox Grid.Row="3"
+                             Grid.Column="1"
+                             Classes="path-box"
+                             MinHeight="72"
+                             IsReadOnly="True"
+                             Text="{Binding PersistenceSummary, Mode=OneWay}" />
+                  </Grid>
+                </ScrollViewer>
+              </Expander>
             </Border>
           </Grid>
-
-          <Border Grid.Row="1"
-                  Padding="16"
-                  Background="{StaticResource PanelBrush}"
-                  CornerRadius="14">
-            <Grid RowDefinitions="Auto,*">
-              <Grid ColumnDefinitions="*,Auto">
-                <TextBlock FontSize="18"
-                           FontWeight="SemiBold"
-                           Text="Latest Transcript" />
-                <Button Grid.Column="1"
-                        MinWidth="86"
-                        Padding="10,6"
-                        Command="{Binding CopyLatestTranscriptCommand}"
-                        Content="Copy" />
-              </Grid>
-              <TextBox Grid.Row="1"
-                       Margin="0,12,0,0"
-                       AcceptsReturn="True"
-                       IsReadOnly="True"
-                       ScrollViewer.VerticalScrollBarVisibility="Auto"
-                       Text="{Binding CurrentTranscript, Mode=OneWay}"
-                       TextWrapping="Wrap" />
-            </Grid>
-          </Border>
-
-          <Border Grid.Row="2"
-                  Margin="0,16,0,0"
-                  Padding="16"
-                  Background="{StaticResource PanelBrush}"
-                  CornerRadius="14">
-            <StackPanel>
-              <TextBlock FontSize="16"
-                         FontWeight="SemiBold"
-                         Text="Diagnostics" />
-              <TextBlock Margin="0,10,0,0"
-                         Text="{Binding DetectedLanguageText}"
-                         TextWrapping="Wrap" />
-              <TextBlock Margin="0,10,0,0"
-                         Text="{Binding LastError}"
-                         TextWrapping="Wrap" />
-              <TextBlock Margin="0,12,0,0"
-                         Foreground="{StaticResource TextBrush}"
-                         Opacity="0.7"
-                         Text="{Binding PersistenceSummary}"
-                         TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-        </Grid>
+        </ScrollViewer>
       </TabItem>
 
       <TabItem Header="File Transcription">
-        <Grid Margin="0,16,0,0"
-              RowDefinitions="Auto,Auto,Auto,*">
-          <Border Padding="16"
-                  Background="{StaticResource PanelBrush}"
-                  CornerRadius="14">
-            <Grid ColumnDefinitions="*,Auto,Auto">
-              <TextBox Margin="0,0,12,0"
-                       VerticalContentAlignment="Center"
-                       Text="{Binding SelectedFilePath, Mode=TwoWay}" />
-              <Button Grid.Column="1"
-                      Width="110"
-                      Margin="0,0,12,0"
-                      Command="{Binding BrowseFileCommand}"
-                      Content="Browse" />
-              <Button Grid.Column="2"
-                      Width="140"
-                      Background="{StaticResource AccentBrush}"
-                      Command="{Binding TranscribeFileCommand}"
-                      Content="Transcribe File"
-                      Foreground="White" />
-            </Grid>
-          </Border>
+        <ScrollViewer Margin="0,18,0,0"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+          <Grid RowDefinitions="Auto,Auto,*"
+                RowSpacing="18">
+            <Border Classes="card">
+              <Grid RowDefinitions="Auto,Auto"
+                    RowSpacing="14">
+                <StackPanel Spacing="4">
+                  <TextBlock Classes="section-title"
+                             Text="Source File" />
+                  <TextBlock Classes="section-caption"
+                             Text="Select a local .wav or .mp3 file for preview and transcription." />
+                </StackPanel>
+                <Grid Grid.Row="1"
+                      ColumnDefinitions="*,Auto,Auto"
+                      ColumnSpacing="12">
+                  <TextBox VerticalContentAlignment="Center"
+                           Text="{Binding SelectedFilePath, Mode=TwoWay}" />
+                  <Button Grid.Column="1"
+                          Classes="secondary"
+                          Width="112"
+                          Command="{Binding BrowseFileCommand}"
+                          Content="Browse" />
+                  <Button Grid.Column="2"
+                          Classes="primary"
+                          Width="152"
+                          Command="{Binding TranscribeFileCommand}"
+                          Content="Transcribe File" />
+                </Grid>
+              </Grid>
+            </Border>
 
-          <Border Grid.Row="1"
-                  Margin="0,16,0,0"
-                  Padding="22"
-                  DragDrop.AllowDrop="True"
-                  Background="{StaticResource PanelBrush}"
-                  BorderBrush="{StaticResource AccentBrush}"
-                  BorderThickness="2"
-                  CornerRadius="14"
-                  DragDrop.DragOver="OnAudioFileDragOver"
-                  DragDrop.Drop="OnAudioFileDrop">
-            <StackPanel HorizontalAlignment="Center"
-                        Spacing="8">
-              <TextBlock HorizontalAlignment="Center"
-                         FontSize="18"
-                         FontWeight="SemiBold"
-                         Text="Drop Audio File Here" />
-              <TextBlock HorizontalAlignment="Center"
-                         Opacity="0.75"
-                         Text="Drag a .wav or .mp3 file into this area to load it for preview and transcription."
-                         TextAlignment="Center"
+            <Grid Grid.Row="1"
+                  ColumnDefinitions="1.1*,0.9*"
+                  ColumnSpacing="18">
+              <Border Classes="drop-zone"
+                      DragDrop.AllowDrop="True"
+                      DragDrop.DragOver="OnAudioFileDragOver"
+                      DragDrop.Drop="OnAudioFileDrop">
+                <Grid RowDefinitions="Auto,Auto"
+                      RowSpacing="10">
+                  <TextBlock HorizontalAlignment="Center"
+                             Classes="section-title"
+                             Text="Drop Audio File Here" />
+                  <TextBlock Grid.Row="1"
+                             HorizontalAlignment="Center"
+                             Classes="section-caption"
+                             Text="Drag a .wav or .mp3 file into this area to load it without leaving the workflow."
+                             TextAlignment="Center"
+                             TextWrapping="Wrap" />
+                </Grid>
+              </Border>
+
+              <Border Grid.Column="1"
+                      Classes="card">
+                <Grid RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="14">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Playback" />
+                    <TextBlock Classes="section-caption"
+                               Text="Quick control of the selected source file before transcription." />
+                  </StackPanel>
+                  <Grid Grid.Row="1"
+                        ColumnDefinitions="*,*,*"
+                        ColumnSpacing="10">
+                    <Button Classes="secondary"
+                            Command="{Binding PlayPreviewCommand}"
+                            Content="Play" />
+                    <Button Grid.Column="1"
+                            Classes="secondary"
+                            Command="{Binding PausePreviewCommand}"
+                            Content="Pause" />
+                    <Button Grid.Column="2"
+                            Classes="secondary"
+                            Command="{Binding StopPreviewCommand}"
+                            Content="Stop" />
+                  </Grid>
+                  <Border Grid.Row="2"
+                          Classes="card-muted">
+                    <Grid ColumnDefinitions="120,*"
+                          ColumnSpacing="14">
+                      <TextBlock Classes="kv-label"
+                                 Text="Elapsed" />
+                      <TextBlock Grid.Column="1"
+                                 Classes="kv-value"
+                                 Text="{Binding FileTranscriptionElapsedText}" />
+                    </Grid>
+                  </Border>
+                </Grid>
+              </Border>
+            </Grid>
+
+            <Border Grid.Row="2"
+                    Classes="card">
+              <Grid RowDefinitions="Auto,*"
+                    RowSpacing="14">
+                <StackPanel Spacing="4">
+                  <TextBlock Classes="section-title"
+                             Text="File Transcript" />
+                  <TextBlock Classes="section-caption"
+                             Text="Read-only transcript output for the selected audio file." />
+                </StackPanel>
+                <TextBox Grid.Row="1"
+                         Classes="transcript-box"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Text="{Binding FileTranscript, Mode=OneWay}"
                          TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-
-          <StackPanel Grid.Row="2"
-                      Margin="0,16,0,16"
-                      Orientation="Horizontal">
-            <Button Width="90"
-                    Margin="0,0,12,0"
-                    Command="{Binding PlayPreviewCommand}"
-                    Content="Play" />
-            <Button Width="90"
-                    Margin="0,0,12,0"
-                    Command="{Binding PausePreviewCommand}"
-                    Content="Pause" />
-            <Button Width="90"
-                    Command="{Binding StopPreviewCommand}"
-                    Content="Stop" />
-            <TextBlock Margin="16,0,0,0"
-                       VerticalAlignment="Center"
-                       FontWeight="SemiBold"
-                       Text="{Binding FileTranscriptionElapsedText}" />
-          </StackPanel>
-
-          <Border Grid.Row="3"
-                  Padding="16"
-                  Background="{StaticResource PanelBrush}"
-                  CornerRadius="14">
-            <Grid RowDefinitions="Auto,*">
-              <TextBlock FontSize="18"
-                         FontWeight="SemiBold"
-                         Text="File Transcript" />
-              <TextBox Grid.Row="1"
-                       Margin="0,12,0,0"
-                       AcceptsReturn="True"
-                       IsReadOnly="True"
-                       ScrollViewer.VerticalScrollBarVisibility="Auto"
-                       Text="{Binding FileTranscript, Mode=OneWay}"
-                       TextWrapping="Wrap" />
-            </Grid>
-          </Border>
-        </Grid>
+              </Grid>
+            </Border>
+          </Grid>
+        </ScrollViewer>
       </TabItem>
 
       <TabItem Header="Settings">
-        <ScrollViewer Margin="0,16,0,0"
+        <ScrollViewer Margin="0,18,0,0"
                       VerticalScrollBarVisibility="Auto">
-          <Grid ColumnDefinitions="*,*">
-            <StackPanel Margin="0,0,12,0">
-              <Border Padding="16"
-                      Background="{StaticResource PanelBrush}"
-                      CornerRadius="14">
-                <StackPanel>
-                  <TextBlock FontSize="18"
-                             FontWeight="SemiBold"
-                             Text="Transcription" />
-                  <TextBlock Margin="0,16,0,4" Text="Execution Target" />
-                  <ComboBox ItemsSource="{Binding TranscriptionTargets}"
-                            SelectedItem="{Binding SelectedTranscriptionTarget}" />
-                  <TextBlock Margin="0,16,0,4" Text="Language Mode" />
-                  <ComboBox ItemsSource="{Binding Languages}"
-                            SelectedItem="{Binding Settings.Transcription.LanguageMode}" />
-                  <TextBlock Margin="0,16,0,4" Text="Runtime" />
-                  <ComboBox ItemsSource="{Binding RuntimePreferences}"
-                            SelectedItem="{Binding Settings.Transcription.RuntimePreference}" />
-                  <TextBlock Margin="0,16,0,4" Text="Recording Model" />
-                  <ComboBox ItemsSource="{Binding ModelPresets}"
-                            SelectedItem="{Binding Settings.Transcription.RecordingModelPreset}" />
-                  <TextBlock Margin="0,16,0,4" Text="File Model" />
-                  <ComboBox ItemsSource="{Binding ModelPresets}"
-                            SelectedItem="{Binding Settings.Transcription.FileModelPreset}" />
-                  <TextBlock Margin="0,16,0,4" Text="Microphone Threads" />
-                  <TextBox Text="{Binding Settings.Transcription.RecordingThreadCount}" />
-                  <TextBlock Margin="0,16,0,4" Text="File Threads" />
-                  <TextBox Text="{Binding Settings.Transcription.FileThreadCount}" />
-                  <TextBlock Margin="0,16,0,4" Text="Custom Model Path" />
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Margin="0,0,12,0"
-                             Text="{Binding CustomModelPath}" />
-                    <Button Grid.Column="1"
-                            Padding="12,6"
-                            Command="{Binding BrowseModelFileCommand}"
-                            Content="Browse" />
+          <Grid ColumnDefinitions="*,*"
+                ColumnSpacing="18">
+            <Grid RowDefinitions="Auto,Auto"
+                  RowSpacing="18">
+              <Border Classes="card">
+                <Grid RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="16">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Transcription" />
+                    <TextBlock Classes="section-caption"
+                               Text="Execution target, language, runtime and model selection for microphone and file workflows." />
+                  </StackPanel>
+                  <Grid Grid.Row="1"
+                        ColumnDefinitions="180,*"
+                        ColumnSpacing="16"
+                        RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                        RowSpacing="12">
+                    <TextBlock Classes="form-label" Text="Execution Target" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding TranscriptionTargets}"
+                              SelectedItem="{Binding SelectedTranscriptionTarget}" />
+                    <TextBlock Grid.Row="1" Classes="form-label" Text="Language Mode" />
+                    <ComboBox Grid.Row="1"
+                              Grid.Column="1"
+                              ItemsSource="{Binding Languages}"
+                              SelectedItem="{Binding Settings.Transcription.LanguageMode}" />
+                    <TextBlock Grid.Row="2" Classes="form-label" Text="Runtime" />
+                    <ComboBox Grid.Row="2"
+                              Grid.Column="1"
+                              ItemsSource="{Binding RuntimePreferences}"
+                              SelectedItem="{Binding Settings.Transcription.RuntimePreference}" />
+                    <TextBlock Grid.Row="3" Classes="form-label" Text="Recording Model" />
+                    <ComboBox Grid.Row="3"
+                              Grid.Column="1"
+                              ItemsSource="{Binding ModelPresets}"
+                              SelectedItem="{Binding Settings.Transcription.RecordingModelPreset}" />
+                    <TextBlock Grid.Row="4" Classes="form-label" Text="File Model" />
+                    <ComboBox Grid.Row="4"
+                              Grid.Column="1"
+                              ItemsSource="{Binding ModelPresets}"
+                              SelectedItem="{Binding Settings.Transcription.FileModelPreset}" />
+                    <TextBlock Grid.Row="5" Classes="form-label" Text="Microphone Threads" />
+                    <TextBox Grid.Row="5"
+                             Grid.Column="1"
+                             Text="{Binding Settings.Transcription.RecordingThreadCount}" />
+                    <TextBlock Grid.Row="6" Classes="form-label" Text="File Threads" />
+                    <TextBox Grid.Row="6"
+                             Grid.Column="1"
+                             Text="{Binding Settings.Transcription.FileThreadCount}" />
+                    <TextBlock Grid.Row="7" Classes="form-label" Text="Custom Model Path" />
+                    <Grid Grid.Row="7"
+                          Grid.Column="1"
+                          ColumnDefinitions="*,Auto"
+                          ColumnSpacing="10">
+                      <TextBox Text="{Binding CustomModelPath}" />
+                      <Button Grid.Column="1"
+                              Classes="secondary"
+                              Width="108"
+                              Command="{Binding BrowseModelFileCommand}"
+                              Content="Browse" />
+                    </Grid>
+                    <TextBlock Grid.Row="8" Classes="form-label" Text="OpenVINO Toolkit" />
+                    <Grid Grid.Row="8"
+                          Grid.Column="1"
+                          ColumnDefinitions="*,Auto"
+                          ColumnSpacing="10">
+                      <TextBox Text="{Binding OpenVinoRuntimePath}" />
+                      <Button Grid.Column="1"
+                              Classes="secondary"
+                              Width="108"
+                              Command="{Binding BrowseOpenVinoRuntimePathCommand}"
+                              Content="Browse" />
+                    </Grid>
                   </Grid>
-                  <TextBlock Margin="0,16,0,4" Text="OpenVINO Toolkit Path" />
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Margin="0,0,12,0"
-                             Text="{Binding OpenVinoRuntimePath}" />
-                    <Button Grid.Column="1"
-                            Padding="12,6"
-                            Command="{Binding BrowseOpenVinoRuntimePathCommand}"
-                            Content="Browse" />
-                  </Grid>
-                  <TextBlock Margin="0,16,0,4" Text="Remote Server URL" />
-                  <TextBox Text="{Binding RemoteServerUrl}" />
-                  <TextBlock Margin="0,16,0,4" Text="Remote Timeout (seconds)" />
-                  <TextBox Text="{Binding RemoteTimeoutSeconds}" />
-                  <TextBlock Margin="0,8,0,0"
-                             Opacity="0.7"
-                             Text="Select the folder that contains the OpenVINO runtime binaries. When set, it is added to the process PATH before OpenVINO is initialized."
-                             TextWrapping="Wrap" />
-                  <TextBlock Margin="0,12,0,0"
-                             Opacity="0.7"
-                             Text="When Execution Target is Server, the desktop app uploads audio to the server over HTTP. The server performs transcription with its own configured Whisper model, runtime, language mode, and thread counts from appsettings.json."
-                             TextWrapping="Wrap" />
-                  <TextBlock Margin="0,12,0,0"
-                             Opacity="0.7"
-                             Text="Whisper.net uses local ggml model files. If Custom Model Path points to a local file, it takes priority over preset mapping. Runtime Auto prefers CUDA, then Vulkan, then OpenVino, then CPU."
-                             TextWrapping="Wrap" />
-                </StackPanel>
+                  <StackPanel Grid.Row="2"
+                              Spacing="8">
+                    <TextBlock Classes="section-caption"
+                               Text="Select the folder that contains the OpenVINO runtime binaries. When set, it is added to the process PATH before OpenVINO is initialized."
+                               TextWrapping="Wrap" />
+                    <TextBlock Classes="section-caption"
+                               Text="When Execution Target is Server, the desktop app uploads audio to the server over HTTP. The server performs transcription with its own Whisper model, runtime, language mode, and thread counts from appsettings.json."
+                               TextWrapping="Wrap" />
+                    <TextBlock Classes="section-caption"
+                               Text="Whisper.net uses local ggml model files. If Custom Model Path points to a local file, it takes priority over preset mapping. Runtime Auto prefers CUDA, then Vulkan, then OpenVino, then CPU."
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+                </Grid>
               </Border>
 
-              <Border Margin="0,16,0,0"
-                      Padding="16"
-                      Background="{StaticResource PanelBrush}"
-                      CornerRadius="14">
-                <StackPanel>
-                  <TextBlock FontSize="18"
-                             FontWeight="SemiBold"
-                             Text="Hotkeys" />
-                  <TextBlock Margin="0,16,0,4" Text="Start / Stop Recording" />
-                  <TextBox IsReadOnly="True"
-                           KeyDown="OnHotkeyTextBoxKeyDown"
-                           Tag="ToggleRecording"
-                           Text="{Binding Settings.Hotkeys.ToggleRecordingGesture}" />
-                  <TextBlock Margin="0,16,0,4" Text="Cancel Recording" />
-                  <TextBox IsReadOnly="True"
-                           KeyDown="OnHotkeyTextBoxKeyDown"
-                           Tag="CancelRecording"
-                           Text="{Binding Settings.Hotkeys.CancelRecordingGesture}" />
-                  <TextBlock Margin="0,10,0,0"
-                             Opacity="0.7"
+              <Border Grid.Row="1"
+                      Classes="card">
+                <Grid RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="16">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Hotkeys" />
+                    <TextBlock Classes="section-caption"
+                               Text="Press-to-capture fields for start/stop and cancel shortcuts." />
+                  </StackPanel>
+                  <Grid Grid.Row="1"
+                        ColumnDefinitions="180,*"
+                        ColumnSpacing="16"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="12">
+                    <TextBlock Classes="form-label" Text="Start / Stop Recording" />
+                    <TextBox Grid.Column="1"
+                             IsReadOnly="True"
+                             KeyDown="OnHotkeyTextBoxKeyDown"
+                             Tag="ToggleRecording"
+                             Text="{Binding Settings.Hotkeys.ToggleRecordingGesture}" />
+                    <TextBlock Grid.Row="1" Classes="form-label" Text="Cancel Recording" />
+                    <TextBox Grid.Row="1"
+                             Grid.Column="1"
+                             IsReadOnly="True"
+                             KeyDown="OnHotkeyTextBoxKeyDown"
+                             Tag="CancelRecording"
+                             Text="{Binding Settings.Hotkeys.CancelRecordingGesture}" />
+                  </Grid>
+                  <TextBlock Grid.Row="2"
+                             Classes="section-caption"
                              Text="Click a field and press the desired shortcut. Modifier-only shortcuts are ignored. Save settings to persist and reapply the new hotkeys."
                              TextWrapping="Wrap" />
-                </StackPanel>
+                </Grid>
               </Border>
-            </StackPanel>
+            </Grid>
 
-            <StackPanel Grid.Column="1"
-                        Margin="12,0,0,0">
-              <Border Padding="16"
-                      Background="{StaticResource PanelBrush}"
-                      CornerRadius="14">
-                <StackPanel>
-                  <TextBlock FontSize="18"
-                             FontWeight="SemiBold"
-                             Text="Audio + Paste" />
-                  <TextBlock Margin="0,16,0,4" Text="Recording Input Device" />
-                  <Grid ColumnDefinitions="*,Auto">
-                    <ComboBox ItemsSource="{Binding InputDevices}"
-                              SelectedItem="{Binding SelectedInputDevice}">
-                      <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                          <TextBlock Text="{Binding DisplayName}" />
-                        </DataTemplate>
-                      </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Grid.Column="1"
-                            Margin="12,0,0,0"
-                            Padding="12,6"
-                            Command="{Binding RefreshInputDevicesCommand}"
-                            Content="Refresh" />
+            <Grid Grid.Column="1"
+                  RowDefinitions="Auto,Auto,Auto"
+                  RowSpacing="18">
+              <Border Classes="card">
+                <Grid RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="16">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Audio + Paste" />
+                    <TextBlock Classes="section-caption"
+                               Text="Input device selection and clipboard/paste behavior." />
+                  </StackPanel>
+                  <Grid Grid.Row="1"
+                        ColumnDefinitions="180,*"
+                        ColumnSpacing="16">
+                    <TextBlock Classes="form-label" Text="Recording Input Device" />
+                    <Grid Grid.Column="1"
+                          ColumnDefinitions="*,Auto"
+                          ColumnSpacing="10">
+                      <ComboBox ItemsSource="{Binding InputDevices}"
+                                SelectedItem="{Binding SelectedInputDevice}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                      <Button Grid.Column="1"
+                              Classes="secondary"
+                              Width="108"
+                              Command="{Binding RefreshInputDevicesCommand}"
+                              Content="Refresh" />
+                    </Grid>
                   </Grid>
-                  <CheckBox Margin="0,16,0,0"
-                            Content="Enable feedback sounds"
-                            IsChecked="{Binding Settings.Audio.EnableFeedbackSounds}" />
-                  <CheckBox Margin="0,8,0,0"
-                            Content="Enable near-realtime live preview placeholder"
-                            IsChecked="{Binding Settings.Audio.EnableLivePreview}" />
-                  <CheckBox Margin="0,8,0,0"
-                            Content="Transcribe microphone directly from memory (no temp WAV)"
-                            IsChecked="{Binding Settings.Audio.TranscribeMicrophoneDirectlyFromMemory}" />
-                  <CheckBox Margin="0,8,0,0"
-                            Content="Restore clipboard after paste"
-                            IsChecked="{Binding Settings.Paste.RestoreClipboardAfterPaste}" />
-                </StackPanel>
+                  <StackPanel Grid.Row="2"
+                              Spacing="10">
+                    <CheckBox Classes="setting-check"
+                              Content="Enable feedback sounds"
+                              IsChecked="{Binding Settings.Audio.EnableFeedbackSounds}" />
+                    <CheckBox Classes="setting-check"
+                              Content="Enable near-realtime live preview placeholder"
+                              IsChecked="{Binding Settings.Audio.EnableLivePreview}" />
+                    <CheckBox Classes="setting-check"
+                              Content="Transcribe microphone directly from memory (no temp WAV)"
+                              IsChecked="{Binding Settings.Audio.TranscribeMicrophoneDirectlyFromMemory}" />
+                    <CheckBox Classes="setting-check"
+                              Content="Restore clipboard after paste"
+                              IsChecked="{Binding Settings.Paste.RestoreClipboardAfterPaste}" />
+                  </StackPanel>
+                </Grid>
               </Border>
 
-              <Border Margin="0,16,0,0"
-                      Padding="16"
-                      Background="{StaticResource PanelBrush}"
-                      CornerRadius="14">
-                <StackPanel>
-                  <TextBlock FontSize="18"
-                             FontWeight="SemiBold"
-                             Text="Logging" />
-                  <CheckBox Margin="0,16,0,0"
+              <Border Grid.Row="1"
+                      Classes="card">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                      RowSpacing="16">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Logging + Connectivity" />
+                    <TextBlock Classes="section-caption"
+                               Text="Logging switches, remote endpoint details and readable storage locations." />
+                  </StackPanel>
+                  <CheckBox Grid.Row="1"
+                            Classes="setting-check"
                             Content="Enable activity log"
                             IsChecked="{Binding Settings.Logging.EnableLogging}" />
-                  <CheckBox Margin="0,8,0,0"
+                  <CheckBox Grid.Row="2"
+                            Classes="setting-check"
                             Content="Write transcript history"
                             IsChecked="{Binding Settings.Logging.WriteTranscriptHistory}" />
-                  <TextBlock Margin="0,16,0,0"
-                             Text="{Binding PersistenceSummary}"
-                             TextWrapping="Wrap" />
-                </StackPanel>
+                  <Grid Grid.Row="3"
+                        ColumnDefinitions="180,*"
+                        ColumnSpacing="16"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="12">
+                    <TextBlock Classes="form-label" Text="Remote Server URL" />
+                    <TextBox Grid.Column="1"
+                             Text="{Binding RemoteServerUrl}" />
+                    <TextBlock Grid.Row="1"
+                               Classes="form-label"
+                               Text="Remote Timeout (seconds)" />
+                    <TextBox Grid.Row="1"
+                             Grid.Column="1"
+                             Text="{Binding RemoteTimeoutSeconds}" />
+                  </Grid>
+                  <Grid Grid.Row="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="10">
+                    <TextBlock Classes="kv-label"
+                               Text="Storage Paths" />
+                    <TextBox Grid.Row="1"
+                             Classes="path-box"
+                             IsReadOnly="True"
+                             Text="{Binding PersistenceSummary}" />
+                  </Grid>
+                </Grid>
               </Border>
 
-              <Border Margin="0,16,0,0"
-                      Padding="16"
-                      Background="{StaticResource PanelBrush}"
-                      CornerRadius="14">
-                <StackPanel>
-                  <TextBlock FontSize="18"
-                             FontWeight="SemiBold"
-                             Text="Model Tools" />
-                  <Button Margin="0,16,0,0"
-                          Background="{StaticResource AccentBrush}"
-                          Command="{Binding DownloadModelCommand}"
-                          Content="Download Selected Model"
-                          Foreground="White" />
-                  <Button Margin="0,12,0,0"
-                          Command="{Binding DeleteTempAudioFilesCommand}"
-                          Content="Delete Temp WAV Files" />
-                  <Button Margin="0,12,0,0"
-                          Command="{Binding SaveSettingsCommand}"
-                          Content="Save Settings" />
-                </StackPanel>
+              <Border Grid.Row="2"
+                      Classes="card">
+                <Grid RowDefinitions="Auto,Auto"
+                      RowSpacing="16">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="section-title"
+                               Text="Model Tools" />
+                    <TextBlock Classes="section-caption"
+                               Text="Maintenance actions for models, temp files and persisted settings." />
+                  </StackPanel>
+                  <StackPanel Grid.Row="1"
+                              Spacing="10">
+                    <Button Classes="primary"
+                            Command="{Binding DownloadModelCommand}"
+                            Content="Download Selected Model" />
+                    <Button Classes="secondary"
+                            Command="{Binding DeleteTempAudioFilesCommand}"
+                            Content="Delete Temp WAV Files" />
+                    <Button Classes="secondary"
+                            Command="{Binding SaveSettingsCommand}"
+                            Content="Save Settings" />
+                  </StackPanel>
+                </Grid>
               </Border>
-            </StackPanel>
+            </Grid>
           </Grid>
         </ScrollViewer>
       </TabItem>

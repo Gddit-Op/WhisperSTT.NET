@@ -5,13 +5,14 @@
              RequestedThemeVariant="Default">
   <Application.Styles>
     <fluent:FluentTheme />
+    <StyleInclude Source="avares://WhisperSTT.App/Styles/ControlStyles.axaml" />
   </Application.Styles>
 
   <Application.Resources>
-    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFF6F1E8" />
-    <SolidColorBrush x:Key="PanelBrush" Color="#FFFBF8F4" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#FF9E4B2D" />
-    <SolidColorBrush x:Key="AccentSoftBrush" Color="#FFE9D2C7" />
-    <SolidColorBrush x:Key="TextBrush" Color="#FF231B19" />
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://WhisperSTT.App/Styles/Theme.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
   </Application.Resources>
 </Application>

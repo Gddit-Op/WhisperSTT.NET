@@ -1,0 +1,36 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <LinearGradientBrush x:Key="WindowBackgroundBrush"
+                       StartPoint="0,0"
+                       EndPoint="1,1">
+    <GradientStop Offset="0.0" Color="#FFF7F8FB" />
+    <GradientStop Offset="0.55" Color="#FFF3F0EA" />
+    <GradientStop Offset="1.0" Color="#FFECEFF1" />
+  </LinearGradientBrush>
+
+  <SolidColorBrush x:Key="SurfaceBrush" Color="#FFF5F7FA" />
+  <SolidColorBrush x:Key="PanelBrush" Color="#FFFDFDFE" />
+  <SolidColorBrush x:Key="PanelAltBrush" Color="#FFF7F9FC" />
+  <SolidColorBrush x:Key="FieldBrush" Color="#FFF9FAFC" />
+  <SolidColorBrush x:Key="FieldHoverBrush" Color="#FFF4F7FB" />
+  <SolidColorBrush x:Key="TranscriptBrush" Color="#FFF6F8FB" />
+  <SolidColorBrush x:Key="AccentBrush" Color="#FF2E5BFF" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF244DE7" />
+  <SolidColorBrush x:Key="AccentPressedBrush" Color="#FF1B3FCC" />
+  <SolidColorBrush x:Key="AccentSoftBrush" Color="#FFE8EEFF" />
+  <SolidColorBrush x:Key="AccentSurfaceBrush" Color="#FFF2F5FF" />
+  <SolidColorBrush x:Key="BorderBrush" Color="#FFD8DEE8" />
+  <SolidColorBrush x:Key="BorderStrongBrush" Color="#FFC3CDDB" />
+  <SolidColorBrush x:Key="TextBrush" Color="#FF152033" />
+  <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF536076" />
+  <SolidColorBrush x:Key="TextTertiaryBrush" Color="#FF7B879A" />
+  <SolidColorBrush x:Key="SuccessBrush" Color="#FF22835C" />
+  <SolidColorBrush x:Key="WarningBrush" Color="#FFAD7A10" />
+  <SolidColorBrush x:Key="DangerBrush" Color="#FFBC4B52" />
+  <SolidColorBrush x:Key="DangerSurfaceBrush" Color="#FFFCECEE" />
+
+  <x:Double x:Key="BodyFontSize">14</x:Double>
+  <x:Double x:Key="CaptionFontSize">12</x:Double>
+  <x:Double x:Key="SectionTitleFontSize">18</x:Double>
+  <x:Double x:Key="PageTitleFontSize">30</x:Double>
+</ResourceDictionary>

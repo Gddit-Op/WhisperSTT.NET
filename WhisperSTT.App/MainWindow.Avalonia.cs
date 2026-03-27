@@ -235,7 +235,7 @@ public partial class MainWindow : Window
     private static bool TryGetFirstSupportedAudioFilePath(DragEventArgs e, out string? filePath)
     {
         filePath = null;
-        var files = e.Data.GetFiles();
+        var files = e.DataTransfer.TryGetFiles();
         if (files is null)
         {
             return false;

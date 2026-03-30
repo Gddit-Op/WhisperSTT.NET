@@ -25,12 +25,8 @@
                   BorderBrush="{StaticResource BorderBrush}"
                   BorderThickness="1"
                   CornerRadius="18">
-            <TextBlock HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       FontSize="24"
-                       FontWeight="SemiBold"
-                       Foreground="{StaticResource AccentBrush}"
-                       Text="W" />
+            <Image Source="avares://WhisperSTT.App/Icon.png"
+                   Stretch="UniformToFill" />
           </Border>
 
           <StackPanel Grid.Column="1"

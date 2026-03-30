@@ -84,10 +84,11 @@
                 RowSpacing="10">
             <Grid ColumnDefinitions="1.15*,0.85*"
                   ColumnSpacing="18">
-              <Border Classes="card">
+              <Border Classes="card"
+                      Padding="16">
                 <Grid RowDefinitions="Auto,Auto,Auto"
-                      RowSpacing="14">
-                  <StackPanel Spacing="4">
+                      RowSpacing="10">
+                  <StackPanel Spacing="2">
                     <TextBlock Classes="section-title"
                                Text="Capture Overview" />
                     <TextBlock Classes="section-caption"
@@ -97,26 +98,44 @@
                              Classes="kv-value"
                              Text="{Binding TranscriptionModeSummary}"
                              TextWrapping="Wrap" />
-                  <Border Grid.Row="2"
-                          Classes="card-muted">
-                    <Grid ColumnDefinitions="150,*"
-                          ColumnSpacing="14">
-                      <TextBlock Classes="kv-label"
-                                 Text="Model Status" />
-                      <TextBlock Grid.Column="1"
-                                 Classes="kv-value"
-                                 Text="{Binding ActiveModelSummary}"
-                                 TextWrapping="Wrap" />
-                    </Grid>
-                  </Border>
+                  <Grid Grid.Row="2"
+                        ColumnDefinitions="1.15*,0.85*"
+                        ColumnSpacing="12">
+                    <Border Classes="card-muted"
+                            Padding="12">
+                      <Grid ColumnDefinitions="96,*"
+                            ColumnSpacing="12">
+                        <TextBlock Classes="kv-label"
+                                   Text="Model Status" />
+                        <TextBlock Grid.Column="1"
+                                   Classes="kv-value"
+                                   Text="{Binding ActiveModelSummary}"
+                                   TextWrapping="Wrap" />
+                      </Grid>
+                    </Border>
+                    <Border Grid.Column="1"
+                            Classes="card-muted"
+                            Padding="12">
+                      <Grid ColumnDefinitions="110,*"
+                            ColumnSpacing="10">
+                        <TextBlock Classes="kv-label"
+                                   Text="Detected Language" />
+                        <TextBlock Grid.Column="1"
+                                   Classes="kv-value"
+                                   Text="{Binding LastDetectedLanguage}"
+                                   TextWrapping="Wrap" />
+                      </Grid>
+                    </Border>
+                  </Grid>
                 </Grid>
               </Border>
 
               <Border Grid.Column="1"
-                      Classes="card">
+                      Classes="card"
+                      Padding="16">
                 <Grid RowDefinitions="Auto,Auto"
-                      RowSpacing="14">
-                  <StackPanel Spacing="4">
+                      RowSpacing="10">
+                  <StackPanel Spacing="2">
                     <TextBlock Classes="section-title"
                                Text="Quick Reference" />
                     <TextBlock Classes="section-caption"
@@ -125,10 +144,11 @@
                   <Grid Grid.Row="1"
                         ColumnDefinitions="*,*"
                         RowDefinitions="Auto,Auto"
-                        ColumnSpacing="14"
-                        RowSpacing="14">
-                    <Border Classes="card-muted">
-                      <StackPanel Spacing="4">
+                        ColumnSpacing="12"
+                        RowSpacing="12">
+                    <Border Classes="card-muted"
+                            Padding="12">
+                      <StackPanel Spacing="2">
                         <TextBlock Classes="metric-label"
                                    Text="Toggle Hotkey" />
                         <TextBlock Classes="metric-value"
@@ -136,8 +156,9 @@
                       </StackPanel>
                     </Border>
                     <Border Grid.Column="1"
-                            Classes="card-muted">
-                      <StackPanel Spacing="4">
+                            Classes="card-muted"
+                            Padding="12">
+                      <StackPanel Spacing="2">
                         <TextBlock Classes="metric-label"
                                    Text="Cancel Hotkey" />
                         <TextBlock Classes="metric-value"
@@ -146,14 +167,16 @@
                     </Border>
                     <Border Grid.Row="1"
                             Grid.ColumnSpan="2"
-                            Classes="card-muted">
+                            Classes="card-muted"
+                            Padding="12">
                       <Grid ColumnDefinitions="110,*"
                             ColumnSpacing="14">
                         <TextBlock Classes="kv-label"
-                                   Text="Detected Language" />
+                                   Text="Status" />
                         <TextBlock Grid.Column="1"
                                    Classes="kv-value"
-                                   Text="{Binding LastDetectedLanguage}" />
+                                   Text="{Binding StatusText}"
+                                   TextWrapping="Wrap" />
                       </Grid>
                     </Border>
                   </Grid>

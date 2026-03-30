@@ -14,6 +14,13 @@
   <SolidColorBrush x:Key="FieldBrush" Color="#FFF9FAFC" />
   <SolidColorBrush x:Key="FieldHoverBrush" Color="#FFF4F7FB" />
   <SolidColorBrush x:Key="TranscriptBrush" Color="#FFF6F8FB" />
+  <SolidColorBrush x:Key="OverlayScrimBrush" Color="#CFF6F7FA" />
+  <SolidColorBrush x:Key="OverlayCardBrush" Color="#F7FFFFFF" />
+  <SolidColorBrush x:Key="WaveformPillBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="WaveformStrokeBrush" Color="#FF151515" />
+  <SolidColorBrush x:Key="OverlayActionBrush" Color="#FF111111" />
+  <SolidColorBrush x:Key="OverlayActionHoverBrush" Color="#FF1E1E1E" />
+  <SolidColorBrush x:Key="OverlayActionPressedBrush" Color="#FF2C2C2C" />
   <SolidColorBrush x:Key="AccentBrush" Color="#FF2E5BFF" />
   <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF244DE7" />
   <SolidColorBrush x:Key="AccentPressedBrush" Color="#FF1B3FCC" />

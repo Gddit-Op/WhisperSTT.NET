@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO;
+using System.Collections.ObjectModel;
+using System.Threading;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,6 +15,7 @@ namespace WhisperSTT.App.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
+    private const int RecordingWaveformBarCount = 29;
     private readonly ApplicationPaths _paths;
     private readonly ISettingsStore _settingsStore;
     private readonly IActivityLogService _activityLogService;
@@ -29,6 +32,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly IMessageDialogService _messageDialogService;
     private readonly Stopwatch _fileTranscriptionStopwatch = new();
     private readonly DispatcherTimer _fileTranscriptionTimer;
+    private readonly DispatcherTimer _recordingOverlayTimer;
     private AppStatus _status = AppStatus.Idle;
     private string _statusText = "Idle";
     private string _currentTranscript = string.Empty;
@@ -40,6 +44,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _lastSavedRemoteServerUrl;
     private IReadOnlyList<AudioInputDeviceOption> _inputDevices = [];
     private AudioInputDeviceOption? _selectedInputDevice;
+    private double _latestRecordingLevel;
+    private double _smoothedRecordingLevel;
+    private double _recordingWaveformPhase;
 
     public MainViewModel(
         ApplicationPaths paths,
@@ -78,8 +85,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _fileTranscriptionTimer.Tick += OnFileTranscriptionTimerTick;
+        _recordingOverlayTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(48)
+        };
+        _recordingOverlayTimer.Tick += OnRecordingOverlayTimerTick;
         _selectedFilePath = settings.Transcription.LastFilePath;
         _lastSavedRemoteServerUrl = settings.Transcription.RemoteServerUrl;
+        RecordingWaveformBars = new ObservableCollection<RecordingWaveformBar>(
+            Enumerable.Range(0, RecordingWaveformBarCount)
+                .Select(_ => new RecordingWaveformBar()));
+        ResetRecordingWaveformBars();
+        _audioRecorderService.AudioLevelChanged += OnAudioLevelChanged;
 
         ToggleRecordingCommand = new AsyncRelayCommand(ToggleRecordingAsync, () => Status != AppStatus.Transcribing);
         CancelRecordingCommand = new AsyncRelayCommand(CancelRecordingAsync, () => Status == AppStatus.Recording || _audioRecorderService.IsRecording);
@@ -172,6 +189,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     };
 
     public string RecordingButtonText => Status == AppStatus.Recording || _audioRecorderService.IsRecording ? "Stop Recording" : "Start Recording";
+
+    public bool IsRecordingOverlayVisible => Status == AppStatus.Recording;
+
+    public ObservableCollection<RecordingWaveformBar> RecordingWaveformBars { get; }
 
     public string CurrentTranscript
     {
@@ -467,6 +488,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _fileTranscriptionTimer.Stop();
         _fileTranscriptionTimer.Tick -= OnFileTranscriptionTimerTick;
+        _recordingOverlayTimer.Stop();
+        _recordingOverlayTimer.Tick -= OnRecordingOverlayTimerTick;
+        _audioRecorderService.AudioLevelChanged -= OnAudioLevelChanged;
         (_localTranscriptionService as IDisposable)?.Dispose();
         (_remoteTranscriptionService as IDisposable)?.Dispose();
         (_audioRecorderService as IDisposable)?.Dispose();
@@ -956,6 +980,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         Status = status;
         StatusText = text;
+        OnPropertyChanged(nameof(IsRecordingOverlayVisible));
+
+        if (status == AppStatus.Recording)
+        {
+            StartRecordingOverlayAnimation();
+            return;
+        }
+
+        StopRecordingOverlayAnimation();
     }
 
     private void RaiseCommandStates()
@@ -987,6 +1020,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         FileTranscriptionElapsedText = $"Transcription time: {FormatElapsed(_fileTranscriptionStopwatch.Elapsed)}";
     }
 
+    private void OnRecordingOverlayTimerTick(object? sender, EventArgs e)
+    {
+        var targetLevel = Volatile.Read(ref _latestRecordingLevel);
+        _smoothedRecordingLevel += (targetLevel - _smoothedRecordingLevel) * 0.32;
+        _recordingWaveformPhase += 0.24 + (_smoothedRecordingLevel * 0.42);
+        UpdateRecordingWaveformBars();
+    }
+
     private void StartFileTranscriptionTiming()
     {
         _fileTranscriptionStopwatch.Reset();
@@ -1006,6 +1047,74 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         FileTranscriptionElapsedText = $"Transcription time: {FormatElapsed(_fileTranscriptionStopwatch.Elapsed)}";
     }
 
+    private void OnAudioLevelChanged(object? sender, AudioLevelChangedEventArgs e)
+    {
+        Volatile.Write(ref _latestRecordingLevel, Math.Clamp(e.Level * 4.2, 0f, 1f));
+    }
+
+    private void StartRecordingOverlayAnimation()
+    {
+        if (!_recordingOverlayTimer.IsEnabled)
+        {
+            _recordingOverlayTimer.Start();
+        }
+
+        UpdateRecordingWaveformBars();
+    }
+
+    private void StopRecordingOverlayAnimation()
+    {
+        if (_recordingOverlayTimer.IsEnabled)
+        {
+            _recordingOverlayTimer.Stop();
+        }
+
+        Volatile.Write(ref _latestRecordingLevel, 0d);
+        _smoothedRecordingLevel = 0d;
+        _recordingWaveformPhase = 0d;
+        ResetRecordingWaveformBars();
+    }
+
+    private void ResetRecordingWaveformBars()
+    {
+        if (RecordingWaveformBars.Count == 0)
+        {
+            return;
+        }
+
+        var centerIndex = (RecordingWaveformBars.Count - 1) / 2d;
+        for (var barIndex = 0; barIndex < RecordingWaveformBars.Count; barIndex++)
+        {
+            var distanceFromCenter = Math.Abs(barIndex - centerIndex) / Math.Max(1d, centerIndex);
+            var height = 16d + ((1d - distanceFromCenter) * 18d);
+            RecordingWaveformBars[barIndex].Height = height;
+        }
+    }
+
+    private void UpdateRecordingWaveformBars()
+    {
+        if (RecordingWaveformBars.Count == 0)
+        {
+            return;
+        }
+
+        var centerIndex = (RecordingWaveformBars.Count - 1) / 2d;
+        var animatedLevel = 0.18d + (_smoothedRecordingLevel * 0.82d);
+
+        for (var barIndex = 0; barIndex < RecordingWaveformBars.Count; barIndex++)
+        {
+            var mirroredIndex = barIndex <= centerIndex
+                ? barIndex
+                : RecordingWaveformBars.Count - 1 - barIndex;
+            var distanceFromCenter = Math.Abs(barIndex - centerIndex) / Math.Max(1d, centerIndex);
+            var centerEnvelope = 0.42d + ((1d - distanceFromCenter) * 0.58d);
+            var travel = 0.5d + (0.5d * Math.Sin(_recordingWaveformPhase + (mirroredIndex * 0.58d)));
+            var ripple = 0.5d + (0.5d * Math.Sin((_recordingWaveformPhase * 1.7d) + (mirroredIndex * 0.33d)));
+            var dynamicHeight = 14d + (centerEnvelope * (12d + (animatedLevel * 48d * (0.35d + (0.65d * travel))) + (8d * ripple)));
+            RecordingWaveformBars[barIndex].Height = Math.Clamp(dynamicHeight, 12d, 82d);
+        }
+    }
+
     private static string FormatFileSize(long bytes)
     {
         const long kib = 1024;
@@ -1017,6 +1126,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             >= kib => $"{bytes / (double)kib:F1} KiB",
             _ => $"{bytes} B"
         };
+    }
+
+    public sealed class RecordingWaveformBar : ObservableObject
+    {
+        private double _height = 18d;
+
+        public double Height
+        {
+            get => _height;
+            set => SetProperty(ref _height, value);
+        }
     }
 
     private void ResetFileTranscriptionTiming()

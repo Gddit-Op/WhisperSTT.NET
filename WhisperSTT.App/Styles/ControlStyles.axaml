@@ -21,6 +21,17 @@
     <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
   </Style>
 
+  <Style Selector="TextBlock.overlay-title">
+    <Setter Property="FontSize" Value="26" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.overlay-subtitle">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+
   <Style Selector="TextBlock.section-title">
     <Setter Property="FontSize" Value="{DynamicResource SectionTitleFontSize}" />
     <Setter Property="FontWeight" Value="SemiBold" />
@@ -106,6 +117,27 @@
     <Setter Property="Padding" Value="8" />
   </Style>
 
+  <Style Selector="Border.recording-overlay-scrim">
+    <Setter Property="Background" Value="{DynamicResource OverlayScrimBrush}" />
+  </Style>
+
+  <Style Selector="Border.recording-overlay-card">
+    <Setter Property="Background" Value="{DynamicResource OverlayCardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="32" />
+    <Setter Property="Padding" Value="28" />
+    <Setter Property="MaxWidth" Value="760" />
+  </Style>
+
+  <Style Selector="Border.waveform-pill">
+    <Setter Property="Background" Value="{DynamicResource WaveformPillBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="999" />
+    <Setter Property="Padding" Value="22,18" />
+  </Style>
+
   <Style Selector="Button">
     <Setter Property="MinHeight" Value="40" />
     <Setter Property="Padding" Value="16,10" />
@@ -149,6 +181,26 @@
     <Setter Property="Background" Value="{DynamicResource PanelAltBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <Style Selector="Button.overlay-recording">
+    <Setter Property="MinHeight" Value="50" />
+    <Setter Property="MinWidth" Value="178" />
+    <Setter Property="Padding" Value="22,12" />
+    <Setter Property="Background" Value="{DynamicResource OverlayActionBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource OverlayActionBrush}" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="CornerRadius" Value="999" />
+  </Style>
+
+  <Style Selector="Button.overlay-recording:pointerover">
+    <Setter Property="Background" Value="{DynamicResource OverlayActionHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource OverlayActionHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.overlay-recording:pressed">
+    <Setter Property="Background" Value="{DynamicResource OverlayActionPressedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource OverlayActionPressedBrush}" />
   </Style>
 
   <Style Selector="TextBox">

@@ -10,12 +10,13 @@
         MinHeight="660"
         Background="{StaticResource WindowBackgroundBrush}"
         WindowStartupLocation="CenterScreen">
-  <Grid Margin="20"
-        RowDefinitions="Auto,*"
-        RowSpacing="18">
-    <Border Classes="header-shell">
-      <Grid ColumnDefinitions="*,Auto"
-            ColumnSpacing="20">
+  <Grid>
+    <Grid Margin="20"
+          RowDefinitions="Auto,*"
+          RowSpacing="18">
+      <Border Classes="header-shell">
+        <Grid ColumnDefinitions="*,Auto"
+              ColumnSpacing="20">
         <Grid ColumnDefinitions="Auto,*"
               ColumnSpacing="18">
           <Border Width="58"
@@ -68,16 +69,16 @@
                   Command="{Binding ToggleRecordingCommand}"
                   Content="{Binding RecordingButtonText}" />
         </StackPanel>
-      </Grid>
-    </Border>
+        </Grid>
+      </Border>
 
-    <TabControl Grid.Row="1"
-                Classes="main-tabs">
-      <TabItem Header="Dashboard">
-        <ScrollViewer x:Name="DashboardScrollViewer"
-                      Margin="0,18,0,0"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
+      <TabControl Grid.Row="1"
+                  Classes="main-tabs">
+        <TabItem Header="Dashboard">
+          <ScrollViewer x:Name="DashboardScrollViewer"
+                        Margin="0,18,0,0"
+                        HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto">
           <Grid Width="{Binding #DashboardScrollViewer.Bounds.Width}"
                 RowDefinitions="Auto,Auto,Auto"
                 RowSpacing="10">
@@ -285,13 +286,13 @@
               </Expander>
             </Border>
           </Grid>
-        </ScrollViewer>
-      </TabItem>
+          </ScrollViewer>
+        </TabItem>
 
-      <TabItem Header="File Transcription">
-        <ScrollViewer Margin="0,18,0,0"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
+        <TabItem Header="File Transcription">
+          <ScrollViewer Margin="0,18,0,0"
+                        HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto">
           <Grid RowDefinitions="Auto,Auto,*"
                 RowSpacing="18">
             <Border Classes="card">
@@ -403,12 +404,12 @@
               </Grid>
             </Border>
           </Grid>
-        </ScrollViewer>
-      </TabItem>
+          </ScrollViewer>
+        </TabItem>
 
-      <TabItem Header="Settings">
-        <ScrollViewer Margin="0,18,0,0"
-                      VerticalScrollBarVisibility="Auto">
+        <TabItem Header="Settings">
+          <ScrollViewer Margin="0,18,0,0"
+                        VerticalScrollBarVisibility="Auto">
           <Grid ColumnDefinitions="*,*"
                 ColumnSpacing="18">
             <Grid RowDefinitions="Auto,Auto"
@@ -660,8 +661,70 @@
               </Border>
             </Grid>
           </Grid>
-        </ScrollViewer>
-      </TabItem>
-    </TabControl>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
+    </Grid>
+
+    <Border Classes="recording-overlay-scrim"
+            IsVisible="{Binding IsRecordingOverlayVisible}">
+      <Grid Margin="32">
+        <Border Classes="recording-overlay-card"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+          <Grid RowDefinitions="Auto,Auto,Auto"
+                RowSpacing="22">
+            <StackPanel HorizontalAlignment="Center"
+                        Spacing="6">
+              <TextBlock Classes="overlay-title"
+                         HorizontalAlignment="Center"
+                         Text="Recording in Progress" />
+              <TextBlock Classes="overlay-subtitle"
+                         HorizontalAlignment="Center"
+                         Text="Speak naturally. Stop when you are ready to transcribe."
+                         TextAlignment="Center"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border Grid.Row="1"
+                    Classes="waveform-pill">
+              <Grid Height="96">
+                <ItemsControl HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              ItemsSource="{Binding RecordingWaveformBars}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Width="6"
+                              Height="{Binding Height}"
+                              Margin="4,0"
+                              VerticalAlignment="Center"
+                              Background="{StaticResource WaveformStrokeBrush}"
+                              CornerRadius="999" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="2"
+                        HorizontalAlignment="Center"
+                        Spacing="10">
+              <Button Classes="overlay-recording"
+                      Command="{Binding ToggleRecordingCommand}"
+                      Content="Stop Recording" />
+              <TextBlock Classes="section-caption"
+                         HorizontalAlignment="Center"
+                         Text="The overlay closes automatically when recording stops."
+                         TextAlignment="Center" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+    </Border>
   </Grid>
 </Window>

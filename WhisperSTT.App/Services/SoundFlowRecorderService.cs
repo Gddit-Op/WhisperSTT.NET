@@ -54,6 +54,8 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
         }
     }
 
+    public event EventHandler<AudioLevelChangedEventArgs>? AudioLevelChanged;
+
     public Task StartRecordingAsync(AudioSettings settings, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -358,6 +360,9 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
             return;
         }
 
+        var audioLevel = ComputeAverageAmplitude(samples);
+        AudioLevelChanged?.Invoke(this, new AudioLevelChangedEventArgs(audioLevel));
+
         if (recordToMemory && recordedSamples is not null)
         {
             lock (_syncRoot)
@@ -387,9 +392,8 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
             _firstDataAvailableLogged = true;
         }
 
-        var averageAmplitude = ComputeAverageAmplitude(samples);
         TryWriteDiagnosticLine(
-            $"Recorder diagnostics: first SoundFlow samples={samples.Length}; totalSamples={totalSamples}; avgAmplitude={averageAmplitude:F6}; device={_currentDeviceNumber} ({_currentDeviceName}).");
+            $"Recorder diagnostics: first SoundFlow samples={samples.Length}; totalSamples={totalSamples}; avgAmplitude={audioLevel:F6}; device={_currentDeviceNumber} ({_currentDeviceName}).");
     }
 
     private void CleanupActiveRecordingState(bool disposeTask)
@@ -415,6 +419,8 @@ public sealed class SoundFlowRecorderService : IAudioRecorderService, IDisposabl
             _lastRecordingEndedWithoutData = false;
             _firstDataAvailableLogged = false;
         }
+
+        AudioLevelChanged?.Invoke(this, new AudioLevelChangedEventArgs(0f));
 
         if (disposeTask)
         {

@@ -29,11 +29,23 @@ public interface IAudioRecorderService
 {
     bool IsRecording { get; }
 
+    event EventHandler<AudioLevelChangedEventArgs>? AudioLevelChanged;
+
     Task StartRecordingAsync(AudioSettings settings, CancellationToken cancellationToken = default);
 
     Task<RecordedAudioCapture?> StopRecordingAsync(CancellationToken cancellationToken = default);
 
     Task CancelRecordingAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class AudioLevelChangedEventArgs : EventArgs
+{
+    public AudioLevelChangedEventArgs(float level)
+    {
+        Level = level;
+    }
+
+    public float Level { get; }
 }
 
 public interface IAudioInputDeviceService

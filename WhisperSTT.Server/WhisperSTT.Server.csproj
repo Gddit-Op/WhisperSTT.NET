@@ -5,7 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SoundFlow" Version="1.4.0" />
+    <PackageReference Include="SoundFlow" Version="1.4.1" />
     <PackageReference Include="Whisper.net" Version="1.9.1-preview1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1-preview1" />
     <PackageReference Include="Whisper.net.Runtime.Cuda" Version="1.9.1-preview1" />
@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

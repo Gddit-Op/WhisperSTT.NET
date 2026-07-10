@@ -1,0 +1,95 @@
+  Ja. Die Basis ist bereits ordentlich: Factory-Caching, native Aufnahmeformate, direkter Speicherpfad und kompilierte Avalonia-Bindings sind schon umgesetzt. Die größten verbleibenden
+  Hebel sehe ich hier:
+
+  ## Performance – höchste Priorität
+
+  1. Transkription vollständig vom UI-Thread entkoppeln
+
+     Audio-Dekodierung und Resampling laufen synchron vor dem ersten sicheren Threadwechsel. Bei längeren Dateien kann dadurch das Fenster kurz einfrieren
+     (WhisperSTT.App/Services/WhisperTranscriptionService.cs:52).
+
+     Empfehlung: Eine dedizierte Transkriptions-Queue bzw. einen Worker verwenden. Dadurch bleibt die Oberfläche auch beim Laden des Modells und Dekodieren großer Dateien
+     reaktionsfähig.
+
+  2. Serverzugriffe begrenzen und Factory-Lebenszyklus absichern
+
+     Der Server ist Singleton, besitzt aber nur einen einzelnen Factory-Cache. Bei zwei gleichzeitigen Anfragen mit unterschiedlichen Modellen kann eine Anfrage die Factory austauschen
+     und entsorgen, während die andere noch arbeitet (WhisperSTT.Server/Services/WhisperServerTranscriptionService.cs:66).
+
+     Kurzfristig: SemaphoreSlim um die gesamte lokale Verarbeitung.
+     Später: Factory-Cache pro Modell/Runtime mit begrenzter Workerzahl.
+
+  3. Remote-Audio nicht mehrfach vollständig kopieren
+
+     Aktuell entstehen mehrere komplette Puffer:
+      - Aufnahme float[]
+      - Client erzeugt daraus byte[]
+      - HTTP/Form-Buffer
+      - Server-MemoryStream
+      - erneut byte[]
+      - Server erzeugt wieder float[]
+
+     Sichtbar in WhisperSTT.Client/Services/RemoteServerTranscriptionClient.cs:155 und WhisperSTT.Server/Program.cs:84.
+
+     Sinnvoll wäre:
+      - vor dem Upload auf 16 kHz mono reduzieren,
+      - PCM16 statt Float32 übertragen,
+      - Datei-Payloads mit StreamContent streamen,
+      - serverseitig nicht über MemoryStream.ToArray() gehen.
+
+     Das senkt Netzwerkvolumen und Speicherbedarf deutlich.
+
+  4. Logging bündeln
+
+     Jeder Logeintrag öffnet und beschreibt die Datei separat (WhisperSTT.Core/Services/FileActivityLogService.cs:15). Pro Transkription werden mehrere Einträge nacheinander
+     geschrieben.
+
+     Eine kleine Channel<string>-basierte Log-Queue mit einem Hintergrund-Writer wäre robuster und reduziert Dateizugriffe.
+
+  5. Lange Speicheraufnahmen optimieren
+
+     Der Recorder sammelt alles in einem wachsenden ArrayBufferWriter<float> und erzeugt am Ende noch eine vollständige Kopie durch ToArray()
+     (WhisperSTT.App/Services/SoundFlowRecorderService.cs:297).
+
+     Für längere Aufnahmen: gepoolte Segmente, maximale Aufnahmedauer oder direktes Downsampling während der Aufnahme. Für kurze Diktate ist das weniger kritisch.
+
+  ## Layout und Bedienung
+
+  1. Dashboard stärker auf die Hauptaufgabe reduzieren
+
+     Aktuell konkurrieren Aufnahme, Capture Overview, Hotkeys, Transcript und Diagnostics visuell miteinander (WhisperSTT.App/MainWindow.axaml:73).
+
+     Ich würde:
+      - „Latest Transcript“ direkt unter die Aufnahmeleiste setzen,
+      - Modell, Sprache und Ziel als kompakte Statuszeile darstellen,
+      - Hotkeys nur als kleine Hinweise zeigen,
+      - Diagnostics in einen Footer oder Dialog verschieben.
+
+  2. Header vereinfachen
+
+     „Cancel“ sollte nur während einer Aufnahme erscheinen. Im Normalzustand reicht eine klare primäre Aufnahmeaktion. Der feste Untertitel „server-side … over HTTP“ ist außerdem
+     irreführend, wenn der lokale Modus aktiv ist (WhisperSTT.App/MainWindow.axaml:49).
+
+  3. Recording-Overlay um „Verwerfen“ ergänzen
+
+     Im Overlay kann man per Maus nur stoppen, nicht abbrechen (WhisperSTT.App/MainWindow.axaml:734). Zwei Aktionen wären klarer:
+      - „Stoppen & transkribieren“
+      - „Aufnahme verwerfen“
+
+  4. File-Ansicht zusammenführen
+
+     Dateipfadzeile und Drop-Zone bilden derzeit zwei konkurrierende Eingaben. Besser wäre eine große Drop-Zone, die nach Auswahl Dateiname, Dauer und Wiedergabe anzeigt. Daneben
+     beziehungsweise darunter die primäre Aktion „Transkribieren“.
+
+  5. Settings nach „Allgemein“ und „Erweitert“ trennen
+
+     Runtime, OpenVINO-Pfad, Threadzahlen und Modellpfade sollten in „Erweitert“. Außerdem nur die Einstellungen anzeigen, die zum ausgewählten Ziel passen: Remote-URL im Servermodus,
+     Runtime/Modelle im lokalen Modus.
+
+  6. Responsive Layout
+
+     Dashboard und Settings verwenden feste Zweispalten-Layouts und eine Mindestbreite von 920 Pixeln. Bei kleinen Fenstern sollten diese Bereiche automatisch einspaltig werden.
+     Gleichzeitig würde ich die 750 Zeilen aus MainWindow.axaml in DashboardView, FileTranscriptionView und SettingsView aufteilen.
+
+  Meine empfohlene Reihenfolge wäre: UI-Thread entkoppeln → Server-Queue absichern → Dashboard vereinfachen → Remote-Payload optimieren → Settings neu gruppieren. Das bringt zuerst
+  spürbar bessere Reaktionsfähigkeit und danach die größte sichtbare Verbesserung.
